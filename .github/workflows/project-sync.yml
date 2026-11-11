@@ -1,0 +1,25 @@
+name: Project board sync
+
+on:
+  issues:
+    types: [opened, labeled, unlabeled, closed, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: project-sync-${{ github.event.issue.number || 'all' }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Sync status labels to Project
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          PROJECT_OWNER: ${{ github.repository_owner }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+        run: python .github/scripts/project_sync.py
