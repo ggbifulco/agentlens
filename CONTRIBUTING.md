@@ -32,6 +32,10 @@ The full local gate, identical to what CI runs:
 uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest
 ```
 
+CI (`.github/workflows/ci.yml`) runs the same gate on every push to `main` and on every pull
+request: a lint/format job, plus mypy + pytest on Python 3.11, 3.12 and 3.13. Each test job uploads
+its coverage report (`coverage.xml` + HTML) as a build artifact named `coverage-py3.X`.
+
 ## Conventions
 
 - **Layout**: `src/agentlens/<package>/...`, tests mirror it under `tests/`.

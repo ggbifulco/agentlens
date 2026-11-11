@@ -18,3 +18,15 @@ Append-only log of development sessions (newest at the bottom).
 - Made `.github/scripts/project_sync.py` ruff-clean (line length only, no behaviour change).
 - Note: no PR CI exists yet (it arrives with #2); verified locally.
 - Next: #2 CI workflow.
+
+## 2026-11-11 — #2 CI workflow
+- Added `.github/workflows/ci.yml`: `lint` job (ruff check with GitHub annotations + ruff format
+  check) and a `test` matrix on Python 3.11/3.12/3.13 (mypy --strict + pytest with the 85% gate
+  from `pyproject.toml`). Triggers: push to `main`, every PR, manual dispatch.
+- uv via `astral-sh/setup-uv` with cache; `UV_LOCKED=1` so a stale `uv.lock` fails CI.
+- Coverage `coverage.xml` + HTML uploaded as `coverage-py3.X` artifacts; least-privilege
+  `permissions`, `concurrency` cancel of outdated runs, job timeouts.
+- CI badge in README, CI section in CONTRIBUTING.
+- Unblocked #1: opened #36 stacked on `chore/1-project-scaffolding` so CI validated #1's code,
+  then squash-merged #35 and retargeted #36 to `main`.
+- Next: #3 Core schema models.
