@@ -1,5 +1,7 @@
 # AgentLens
 
+[![CI](https://github.com/ggbifulco/agentlens/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ggbifulco/agentlens/actions/workflows/ci.yml)
+
 **Regression testing & evaluation for LLM agents.** Record traces, replay runs, score them with
 LLM-as-judge and deterministic checks, and catch regressions in CI — before they ship.
 
