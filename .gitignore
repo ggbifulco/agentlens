@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Environments
+.venv/
+.env
+.env.*
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# AgentLens local data
+.agentlens/
+*.sqlite
+*.db
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

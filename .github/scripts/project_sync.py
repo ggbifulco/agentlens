@@ -16,7 +16,8 @@ import urllib.request
 
 API = "https://api.github.com"
 
-# label suffix / "closed" -> accepted option names on the board (normalised: lowercase, no spaces/dashes)
+# label suffix / "closed" -> accepted option names on the board
+# (normalised: lowercase, no spaces/dashes)
 ALIASES: dict[str, list[str]] = {
     "backlog": ["backlog", "todo"],
     "todo": ["ready", "todo", "nextup"],
@@ -35,7 +36,7 @@ def request(method: str, url: str, token: str, body: dict | None = None) -> obje
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Authorization", f"Bearer {token}")
     req.add_header("Accept", "application/vnd.github+json")
-    with urllib.request.urlopen(req) as resp:  # noqa: S310 (fixed https host)
+    with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read() or b"null")
 
 
@@ -70,14 +71,19 @@ def sync(token: str, project: tuple[str, str, dict[str, str]], issue: dict) -> N
     status = desired_status(issue)
     if status is None:
         return
-    option_id = next((options[a] for a in ALIASES.get(status, [norm(status)]) if a in options), None)
+    option_id = next(
+        (options[a] for a in ALIASES.get(status, [norm(status)]) if a in options), None
+    )
     if option_id is None:
         print(f"::warning::No board column matches status '{status}' (columns: {list(options)})")
         return
-    add = """mutation($p:ID!,$c:ID!){ addProjectV2ItemById(input:{projectId:$p,contentId:$c}){ item { id } } }"""
-    item_id = graphql(token, add, p=project_id, c=issue["node_id"])["addProjectV2ItemById"]["item"]["id"]
+    add = """mutation($p:ID!,$c:ID!){
+      addProjectV2ItemById(input:{projectId:$p,contentId:$c}){ item { id } } }"""
+    added = graphql(token, add, p=project_id, c=issue["node_id"])
+    item_id = added["addProjectV2ItemById"]["item"]["id"]
     upd = """mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){ updateProjectV2ItemFieldValue(input:{
-      projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}}){ projectV2Item { id } } }"""
+      projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}}){
+      projectV2Item { id } } }"""
     graphql(token, upd, p=project_id, i=item_id, f=field_id, o=option_id)
     print(f"#{issue['number']} -> {status}")
 
@@ -98,7 +104,9 @@ def main() -> int:
         repo = os.environ["GITHUB_REPOSITORY"]
         page = 1
         while True:
-            issues = request("GET", f"{API}/repos/{repo}/issues?state=all&per_page=100&page={page}", token)
+            issues = request(
+                "GET", f"{API}/repos/{repo}/issues?state=all&per_page=100&page={page}", token
+            )
             assert isinstance(issues, list)
             if not issues:
                 break

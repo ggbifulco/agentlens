@@ -1,0 +1,93 @@
+[project]
+name = "agentlens"
+dynamic = ["version"]
+description = "Regression testing and evaluation toolkit for LLM agents: record, replay, evaluate, compare."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Giuseppe Bifulco" }]
+keywords = ["llm", "agents", "evaluation", "regression-testing", "tracing", "llm-as-judge"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/ggbifulco/agentlens"
+Issues = "https://github.com/ggbifulco/agentlens/issues"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15",
+    "mypy>=1.15",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "hypothesis>=6.115",
+    "pre-commit>=4.0",
+]
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/agentlens/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentlens"]
+
+# --- ruff -----------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+# Design docs contain illustrative pseudo-code, not formatted Python.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "B",        # flake8-bugbear
+    "UP",       # pyupgrade
+    "SIM",      # flake8-simplify
+    "RUF",      # ruff-specific
+    "PT",       # flake8-pytest-style
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+
+# --- mypy -----------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+files = ["src"]
+
+# --- pytest / coverage ----------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--cov=agentlens", "--cov-report=term-missing"]
+markers = [
+    "live: tests that call real LLM providers (need API keys; skipped by default)",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["agentlens"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
