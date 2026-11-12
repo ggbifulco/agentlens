@@ -18,7 +18,9 @@ classifiers = [
     "Topic :: Software Development :: Testing",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = [
+    "pydantic>=2.9",
+]
 
 [project.urls]
 Homepage = "https://github.com/ggbifulco/agentlens"
@@ -73,6 +75,12 @@ python_version = "3.11"
 strict = true
 warn_unreachable = true
 files = ["src"]
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
 
 # --- pytest / coverage ----------------------------------------------------
 [tool.pytest.ini_options]
