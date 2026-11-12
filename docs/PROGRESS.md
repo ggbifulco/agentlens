@@ -30,3 +30,17 @@ Append-only log of development sessions (newest at the bottom).
 - Unblocked #1: opened #36 stacked on `chore/1-project-scaffolding` so CI validated #1's code,
   then squash-merged #35 and retargeted #36 to `main`.
 - Next: #3 Core schema models.
+
+## 2026-11-12 — #3 Core schema models
+- Added `agentlens.schema` (PR #37): `SpanKind`, `Usage`, `Span`, `Trace`, `EvaluatorSpec`, `Case`,
+  `EvalResult`, `Experiment` on a shared `SchemaModel` base (`extra="forbid"`,
+  `validate_assignment=True`); datetimes must be tz-aware and are normalised to UTC.
+- `Trace` validates span/trace ids, unique span ids and parent links; derived metrics
+  (`total_cost`, `total_tokens`, `latency_ms`, `tool_calls`, `n_steps`) are non-serialised
+  properties. Added `error`, `start_time`, `end_time` to `Trace` (design doc updated).
+- `EvaluatorSpec` parses/serialises the suite YAML shorthands (`no_error`, `{max_steps: 8}`, ...).
+- `schema.ids.new_id()`: RFC 9562 UUIDv7 with a monotonic 12-bit counter; `id_datetime()`.
+- New runtime dependency: `pydantic>=2.9` (+ `pydantic.mypy` plugin).
+- Tests: unit tests + Hypothesis JSON round-trip for every model; reusable strategies in
+  `tests/schema/strategies.py`. 64 tests, 100% coverage.
+- Next: #4 Tracing context and recorder.
