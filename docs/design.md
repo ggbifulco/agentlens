@@ -29,9 +29,16 @@ class Trace(BaseModel):
     name: str
     input: JsonValue
     output: JsonValue | None
+    error: str | None                  # agent raised; run still recorded
+    start_time: datetime
+    end_time: datetime | None
     spans: list[Span]
     metadata: dict[str, JsonValue]     # git sha, agent version, case id, repetition
     # derived: total_cost, total_tokens, latency_ms, tool_calls, n_steps
+
+class EvaluatorSpec(BaseModel):  # "no_error" | {max_steps: 8} | {tool_sequence: {mode: ordered}}
+    name: str
+    params: dict[str, JsonValue]       # scalar shorthand stored as {"value": 8}
 
 class Case(BaseModel):          # one dataset row
     id: str
@@ -52,6 +59,16 @@ class Experiment(BaseModel):
     config: dict[str, JsonValue] # model, prompt version, git sha
     is_baseline: bool
 ```
+
+Implementation notes (`src/agentlens/schema/`):
+- All models forbid unknown fields and validate on assignment. Datetimes must be
+  timezone-aware and are normalised to UTC.
+- Ids are UUIDv7 strings (`schema.ids.new_id`): time-ordered, monotonic within a process.
+- `Trace` validates that spans share its id, span ids are unique and parents exist.
+- Derived metrics are plain properties, never serialised, so stored totals cannot go stale:
+  `total_cost` is `None` when no span has a cost (unknown ≠ free); `latency_ms` is
+  `end_time - start_time` (`None` while running); `tool_calls` lists tool span names in
+  start order; `n_steps` counts `AGENT_STEP` spans, falling back to `LLM_CALL` spans.
 
 ## 2. Tracing
 - Current trace/span held in `contextvars` → works with threads and asyncio.
