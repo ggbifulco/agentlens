@@ -105,3 +105,21 @@ Append-only log of development sessions (newest at the bottom).
 - No new dependencies (stdlib `re`). Tests with nested payloads incl. an end-to-end SQLite check;
   186 tests, 100% coverage.
 - Next: #8 LLMClient protocol, request/response models and MockLLM.
+
+## 2026-11-13 — #8 LLMClient protocol, request/response models and MockLLM
+- Added `agentlens.llm`: `Message` (roles system/user/assistant/tool, `tool_calls` on assistant,
+  `tool_call_id` on tool; `Message.system/user/assistant/tool` constructors), `ToolCall(id, name,
+  arguments)`, `ToolSpec(name, description, parameters)`, `LLMRequest(messages, model,
+  temperature, max_tokens, tools, response_format)`, `LLMResponse(content, tool_calls, usage,
+  raw, model)` and the `runtime_checkable` `LLMClient` protocol (`complete` + async `acomplete`).
+- `LLMRequest.canonical_json()` / `fingerprint()` (sha256) give the normalised request key that
+  cassettes (#13) will hash; `LLMResponse.to_message()` feeds agent loops. Usage reuses
+  `schema.Usage` (`None` = not reported).
+- `MockLLM(script, model=, cycle=, default=)`: list (in order; `MockExhaustedError` when
+  exhausted unless `cycle=True`/`default`), callable `(request) -> item`, or regex map matched
+  against the last user message (`MockNoMatchError` without `default`). Items may be
+  `LLMResponse`, text, `ToolCall` or `list[ToolCall]`. Deterministic usage from whitespace word
+  counts at `cost_usd=0`; requests recorded in `.requests`; thread-safe.
+- No new dependencies (async tested with `asyncio.run`, no pytest-asyncio). 243 tests,
+  100% coverage.
+- Next: #9 wrap_llm and wrap_tool auto-tracing.
