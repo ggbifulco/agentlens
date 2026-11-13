@@ -238,3 +238,26 @@ Append-only log of development sessions (newest at the bottom).
   `replay/_types.py` (re-exported) to break an import cycle.
 - No new dependencies. 595 tests, 100% coverage; README example verified.
 - Next: #15 Evaluator protocol, registry and @evaluator decorator (M3).
+
+## 2026-11-13 — #15 Evaluator protocol, registry and @evaluator decorator
+- Added `agentlens.evals`: `Evaluator` (runtime-checkable Protocol, read-only `name` +
+  `evaluate(trace, case) -> EvalResult`) and `AsyncEvaluator` (`aevaluate`, for #18 judges).
+  `to_eval_result(name, value, threshold=0.5)` normalises `EvalResult` / `bool` (1/0) / score in
+  `[0, 1]` (`passed = score >= threshold`) / `(value, reason)` / mapping with `score`/`passed`.
+- Safe runners: `run_evaluator`, `arun_evaluator` (awaits `aevaluate` or runs `evaluate` in a
+  thread), `evaluate_case(trace, case, evaluators=None)` (default `case.evaluators`, objects and
+  specs mixed, all resolved first), `aevaluate_case` (concurrent, ordered). Any evaluator
+  exception becomes `error_result`: score 0, failed, `reason="evaluator error: Type: msg"`,
+  `details["error"]`.
+- Registry: `EvaluatorRegistry` + `default_registry`, `register(name, factory, primary=,
+  replace=)`, `unregister`, `get_evaluator(spec, **overrides)`, `available_evaluators()`. Scalar
+  shorthand `{max_steps: 8}` (`{"value": 8}`) goes to the factory's primary param (explicit, else
+  first keyword-passable one). Params checked with `Signature.bind`; config errors raised eagerly
+  (`UnknownEvaluatorError` with suggestions, `EvaluatorConfigError`, `DuplicateEvaluatorError`;
+  same-origin re-registration replaces silently).
+- `@agentlens.evaluator` (bare or `name=`, `threshold=`, `register=`, `replace=`, `registry=`)
+  → `FunctionEvaluator` (still callable; `bind(**params)` is the registry factory; extra params
+  after `(trace, case)` come from the spec, `threshold` always accepted; `async def` supported).
+  Top-level `agentlens.evaluator`, `agentlens.Evaluator`. README "Custom evaluators" section.
+- No new dependencies. 669 tests, 100% coverage; README example verified.
+- Next: #16 Deterministic output evaluators (exact, contains, regex, json_schema, no_error).
