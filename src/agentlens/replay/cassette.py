@@ -29,6 +29,15 @@ for LLM calls, :func:`tool_key` for tool calls). Playback modes:
   (and, with ``record_new=True``, stores the new call at that index).
 
 ``record`` (the default for a new cassette) always calls through and stores.
+
+Every call whose request differs from the recorded one at its index is a
+divergence (FR-R3): it is described by a :class:`~agentlens.replay.ReplayDivergence`
+(with a unified diff of the requests), kept in :attr:`Cassette.divergences` and,
+inside :func:`agentlens.run`, marked on the trace (span attribute
+:data:`DIVERGED_ATTR`, first divergence in the trace metadata under
+:data:`DIVERGENCE_ATTR`).
+In ``strict`` mode it is also the ``divergence`` of the raised
+:class:`~agentlens.replay.CassetteMissError`.
 """
 
 from __future__ import annotations
@@ -37,6 +46,7 @@ import functools
 import hashlib
 import inspect
 import json
+import logging
 import os
 import tempfile
 import threading
@@ -49,17 +59,21 @@ from pydantic import Field, JsonValue, NonNegativeInt, ValidationError, model_va
 
 from agentlens.llm.base import LLMClient
 from agentlens.llm.types import LLMRequest, LLMResponse
+from agentlens.replay._types import CassetteMode, EntryKind
+from agentlens.replay.divergence import ReplayDivergence
 from agentlens.replay.errors import CassetteError, CassetteFormatError, CassetteMissError
 from agentlens.schema import Span, SpanKind, Trace
 from agentlens.schema._base import SchemaModel
 from agentlens.tracing._serialize import bind_arguments, to_json_value
-from agentlens.tracing.api import _signature
+from agentlens.tracing.api import _signature, current_span, current_trace
 from agentlens.tracing.wrappers import TOOL_NAME_ATTR
 from agentlens.tracing.wrappers import wrap_tool as _trace_tool
 
 __all__ = [
     "CASSETTE_FORMAT",
     "CASSETTE_VERSION",
+    "DIVERGED_ATTR",
+    "DIVERGENCE_ATTR",
     "Cassette",
     "CassetteEntry",
     "CassetteHeader",
@@ -69,14 +83,23 @@ __all__ = [
     "tool_key",
 ]
 
+logger = logging.getLogger("agentlens.replay")
+
 P = ParamSpec("P")
 R = TypeVar("R")
 
-CassetteMode = Literal["record", "strict", "lenient", "fallthrough"]
-"""How a cassette answers calls; see the module docstring."""
+DIVERGED_ATTR: Final = "replay_diverged"
+"""Span attribute set to ``True`` on a replayed call that diverged."""
 
-EntryKind = Literal["llm", "tool"]
-"""The two kinds of recorded calls. Each kind has its own index sequence."""
+DIVERGENCE_ATTR: Final = "replay_divergence"
+"""Span attribute with the divergence :meth:`~ReplayDivergence.summary`; also the
+trace metadata key holding the *first* divergence's
+:meth:`~ReplayDivergence.to_dict` (without the full requests)."""
+
+_SPAN_KINDS: Final[dict[EntryKind, SpanKind]] = {
+    "llm": SpanKind.LLM_CALL,
+    "tool": SpanKind.TOOL_CALL,
+}
 
 CASSETTE_FORMAT: Final = "agentlens-cassette"
 """Value of ``format`` in the header line of a cassette file."""
@@ -192,6 +215,7 @@ class Cassette:
         self._entries: list[CassetteEntry] = []
         self._positions: dict[tuple[EntryKind, int], int] = {}
         self._cursor: dict[EntryKind, int] = {"llm": 0, "tool": 0}
+        self._divergences: list[ReplayDivergence] = []
         for entry in entries:
             if (entry.kind, entry.index) in self._positions:
                 raise CassetteFormatError(None, None, f"duplicate {entry.kind} call #{entry.index}")
@@ -230,10 +254,29 @@ class Cassette:
         with self._lock:
             return [e for e in self._entries if e.index >= self._cursor[e.kind]]
 
+    @property
+    def divergences(self) -> list[ReplayDivergence]:
+        """Calls of this playback whose request differed from the recording, in call order.
+
+        Filled in every playback mode: ``strict`` (each one also raised a
+        :class:`CassetteMissError`), ``lenient`` (the recorded response was
+        played anyway) and ``fallthrough`` (the real client/tool answered).
+        Cleared by :meth:`rewind`.
+        """
+        with self._lock:
+            return list(self._divergences)
+
+    @property
+    def first_divergence(self) -> ReplayDivergence | None:
+        """The first entry of :attr:`divergences`, or ``None`` if the replay matched so far."""
+        with self._lock:
+            return self._divergences[0] if self._divergences else None
+
     def rewind(self) -> None:
-        """Reset the call counters, to record or play the cassette again from the start."""
+        """Reset the call counters and divergences, to record or play again from the start."""
         with self._lock:
             self._cursor = {"llm": 0, "tool": 0}
+            self._divergences = []
 
     # -- wrappers ---------------------------------------------------------------
 
@@ -377,30 +420,70 @@ class Cassette:
         """Reserve the next index of ``kind``; return it with the entry to play back.
 
         ``None`` means "call the real client/tool". Raises :class:`CassetteMissError`
-        (without consuming the index) on a strict/lenient miss.
+        (without consuming the index) on a strict/lenient miss. Every mismatch
+        is recorded as a divergence (see :meth:`_diverge`).
         """
         with self._lock:
             index = self._cursor[kind]
             mode = self._mode
             hit: CassetteEntry | None = None
+            recorded: CassetteEntry | None = None
+            matches = True
             if mode != "record":
                 position = self._positions.get((kind, index))
                 recorded = self._entries[position] if position is not None else None
                 matches = recorded is not None and recorded.key == key and recorded.name == name
                 if matches or (mode == "lenient" and recorded is not None):
                     hit = recorded
-                elif mode != "fallthrough":
-                    raise CassetteMissError(
-                        kind=kind,
-                        index=index,
-                        mode=mode,
-                        expected=recorded,
-                        actual_request=request,
-                        actual_key=key,
-                        actual_name=name,
-                    )
-            self._cursor[kind] = index + 1
+            raises = not matches and hit is None and mode != "fallthrough"
+            if not raises:
+                self._cursor[kind] = index + 1
+        if matches:
             return index, hit
+        divergence = self._diverge(kind, index, mode, recorded, request, key, name)
+        if raises:
+            raise CassetteMissError(
+                kind=kind,
+                index=index,
+                mode=mode,
+                expected=recorded,
+                actual_request=request,
+                actual_key=key,
+                actual_name=name,
+                divergence=divergence,
+            )
+        return index, hit
+
+    def _diverge(
+        self,
+        kind: EntryKind,
+        index: int,
+        mode: CassetteMode,
+        recorded: CassetteEntry | None,
+        request: JsonValue,
+        key: str,
+        name: str | None,
+    ) -> ReplayDivergence:
+        """Describe a mismatching call, store it and mark it on the current trace."""
+        span = current_span()
+        if span is not None and span.kind is not _SPAN_KINDS[kind]:
+            span = None  # the cassette is not wrapped inside the tracing wrappers
+        divergence = ReplayDivergence.create(
+            kind,
+            index,
+            expected_request=recorded.request if recorded is not None else None,
+            actual_request=request,
+            expected_key=recorded.key if recorded is not None else None,
+            actual_key=key,
+            expected_name=recorded.name if recorded is not None else None,
+            actual_name=name,
+            mode=mode,
+            span_id=span.id if span is not None else None,
+        )
+        with self._lock:
+            self._divergences.append(divergence)
+        _mark_trace(span, divergence)
+        return divergence
 
     def _rollback(self, kind: EntryKind, index: int) -> None:
         """Give back ``index`` after a failed real call (if no later call took one)."""
@@ -520,25 +603,10 @@ class Cassette:
             CassetteFormatError: if an ``llm_call`` span's input/output is not a
                 valid request/response.
         """
-        by_id = {span.id: span for span in trace.spans}
-
-        def inside_tool(span: Span) -> bool:
-            parent_id = span.parent_id
-            while parent_id is not None and parent_id in by_id:
-                parent = by_id[parent_id]
-                if parent.kind is SpanKind.TOOL_CALL:
-                    return True
-                parent_id = parent.parent_id
-            return False
-
         metadata: dict[str, JsonValue] = {"trace_id": trace.id, "trace_name": trace.name}
         entries: list[CassetteEntry] = []
         counts: dict[EntryKind, int] = {"llm": 0, "tool": 0}
-        for span in trace.spans:
-            if span.kind not in (SpanKind.LLM_CALL, SpanKind.TOOL_CALL):
-                continue
-            if span.error is not None or span.end_time is None or inside_tool(span):
-                continue
+        for span in replayable_spans(trace):
             if span.kind is SpanKind.LLM_CALL:
                 entry = _llm_entry_from_span(span, counts["llm"])
                 if not metadata.keys() & {"model", "provider"}:
@@ -558,6 +626,52 @@ class Cassette:
             counts[entry.kind] += 1
             entries.append(entry)
         return cls(entries, mode=mode, record_new=record_new, metadata=metadata)
+
+
+def replayable_spans(trace: Trace) -> list[Span]:
+    """The spans of ``trace`` that :meth:`Cassette.from_trace` turns into entries, in order.
+
+    Finished, successful ``llm_call``/``tool_call`` spans not nested inside a
+    ``tool_call`` (mirroring what recording through a cassette stores).
+    """
+    by_id = {span.id: span for span in trace.spans}
+
+    def inside_tool(span: Span) -> bool:
+        parent_id = span.parent_id
+        while parent_id is not None and parent_id in by_id:
+            parent = by_id[parent_id]
+            if parent.kind is SpanKind.TOOL_CALL:
+                return True
+            parent_id = parent.parent_id
+        return False
+
+    return [
+        span
+        for span in trace.spans
+        if span.kind in (SpanKind.LLM_CALL, SpanKind.TOOL_CALL)
+        and span.error is None
+        and span.end_time is not None
+        and not inside_tool(span)
+    ]
+
+
+def _mark_trace(span: Span | None, divergence: ReplayDivergence) -> None:
+    """Annotate the replayed span and (first divergence only) the trace; never raises."""
+    try:
+        if span is not None:
+            span.attributes = {
+                **span.attributes,
+                DIVERGED_ATTR: True,
+                DIVERGENCE_ATTR: divergence.summary(),
+            }
+        trace = current_trace()
+        if trace is not None and DIVERGENCE_ATTR not in trace.metadata:
+            trace.metadata = {
+                **trace.metadata,
+                DIVERGENCE_ATTR: divergence.to_dict(include_requests=False),
+            }
+    except Exception:  # tracing must never break the agent
+        logger.exception("could not mark the replay divergence on the trace")
 
 
 def _llm_entry_from_span(span: Span, index: int) -> CassetteEntry:

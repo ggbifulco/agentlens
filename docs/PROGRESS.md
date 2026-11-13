@@ -219,3 +219,22 @@ Append-only log of development sessions (newest at the bottom).
   fallthrough, async, from_trace) against a failing client gives an identical trace.
 - No new dependencies. 566 tests, 100% coverage.
 - Next: #14 Replay divergence detection and request diff.
+
+## 2026-11-13 — #14 Replay divergence detection and request diff
+- Added `agentlens.replay.ReplayDivergence` (pydantic): `kind`, `index`, `reason`
+  (`request_changed`/`tool_changed`/`extra_call`/`missing_call`), `mode`, expected/actual
+  `name`/`key`/`request`, `diff`, `diff_truncated`, `span_id`; `create(...)`, `summary()`,
+  `to_dict(include_requests=True)`, `str()` = summary + diff. `request_diff(expected, actual)`:
+  `difflib` unified diff of pretty canonical JSON (sorted keys), bounded by `DIFF_MAX_LINES=200`
+  and `DIFF_MAX_LINE_CHARS=500`.
+- Strict mode: `CassetteMissError` message now ends with the diff; `exc.divergence`. Every
+  playback mode records divergences in `cassette.divergences` / `cassette.first_divergence`
+  (cleared by `rewind()`), lenient/fallthrough without failing.
+- Report-ready trace marking: the diverging `llm_call`/`tool_call` span gets
+  `replay_diverged=True` + `replay_divergence=<summary>` (`DIVERGED_ATTR`/`DIVERGENCE_ATTR`), the
+  trace metadata `replay_divergence` = first divergence `to_dict(include_requests=False)`.
+- `find_divergence(recorded_trace, replayed_trace, *, kind="llm")` compares two traces via
+  `Cassette.from_trace` (same selection and keys). `CassetteMode`/`EntryKind` moved to
+  `replay/_types.py` (re-exported) to break an import cycle.
+- No new dependencies. 595 tests, 100% coverage; README example verified.
+- Next: #15 Evaluator protocol, registry and @evaluator decorator (M3).

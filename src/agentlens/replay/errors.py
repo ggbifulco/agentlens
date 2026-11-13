@@ -7,8 +7,11 @@ from typing import TYPE_CHECKING
 
 from pydantic import JsonValue
 
+from agentlens.replay._types import CassetteMode, EntryKind
+from agentlens.replay.divergence import ReplayDivergence
+
 if TYPE_CHECKING:
-    from agentlens.replay.cassette import CassetteEntry, CassetteMode, EntryKind
+    from agentlens.replay.cassette import CassetteEntry
 
 __all__ = ["CassetteError", "CassetteFormatError", "CassetteMissError"]
 
@@ -25,8 +28,9 @@ class CassetteMissError(CassetteError):
     ``lenient`` mode when there is no recorded call at this index at all. In
     ``fallthrough`` mode a miss calls the real client instead.
 
-    The attributes carry everything needed to explain the divergence (the
-    request diff of ``docs/design.md`` §4 builds on them):
+    The message ends with a unified diff of the recorded and actual requests;
+    :attr:`divergence` holds the same information as a
+    :class:`~agentlens.replay.ReplayDivergence` (for reports).
 
     Attributes:
         kind: ``"llm"`` or ``"tool"``.
@@ -38,6 +42,8 @@ class CassetteMissError(CassetteError):
             ``CassetteEntry.request``).
         actual_key: Its key (sha256 of the normalised request).
         actual_name: The tool name for tool calls, ``None`` for LLM calls.
+        divergence: The :class:`~agentlens.replay.ReplayDivergence` (call
+            index, reason, bounded request diff).
     """
 
     def __init__(
@@ -50,6 +56,7 @@ class CassetteMissError(CassetteError):
         actual_request: JsonValue,
         actual_key: str,
         actual_name: str | None = None,
+        divergence: ReplayDivergence | None = None,
     ) -> None:
         self.kind: EntryKind = kind
         self.index = index
@@ -58,7 +65,21 @@ class CassetteMissError(CassetteError):
         self.actual_request = actual_request
         self.actual_key = actual_key
         self.actual_name = actual_name
-        super().__init__(self._describe())
+        self.divergence = divergence or ReplayDivergence.create(
+            kind,
+            index,
+            expected_request=self.expected_request,
+            actual_request=actual_request,
+            expected_key=expected.key if expected is not None else None,
+            actual_key=actual_key,
+            expected_name=expected.name if expected is not None else None,
+            actual_name=actual_name,
+            mode=mode,
+        )
+        message = self._describe()
+        if self.divergence.diff:
+            message += "\n" + self.divergence.diff
+        super().__init__(message)
 
     @property
     def expected_request(self) -> JsonValue:
