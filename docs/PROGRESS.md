@@ -158,3 +158,22 @@ Append-only log of development sessions (newest at the bottom).
   HTTP). Optional live test: `AGENTLENS_LIVE_TESTS=1 AGENTLENS_LIVE_OPENAI_MODEL=...`
   (+ `OPENAI_API_KEY` or `AGENTLENS_LIVE_OPENAI_BASE_URL`). 381 tests, 100% coverage.
 - Next: #11 Anthropic adapter (reuse `agentlens.llm._http`).
+
+## 2026-11-13 — #11 Anthropic adapter
+- Added `agentlens.llm.AnthropicClient(model=None, *, base_url="https://api.anthropic.com",
+  api_key=, max_tokens=1024, timeout=, max_retries=, retry_policy=, headers=,
+  provider="anthropic", http_client=, async_http_client=)`: `complete`/`acomplete` on
+  `{base_url}/v1/messages` via the shared `_http.JSONHTTPClient` (retries incl. 529);
+  headers `x-api-key` (argument or `ANTHROPIC_API_KEY`) and `anthropic-version: 2023-06-01`.
+  Also exported: `ANTHROPIC_VERSION`, `DEFAULT_ANTHROPIC_BASE_URL`, `DEFAULT_MAX_TOKENS`.
+- Mapping: system messages → top-level `system`; `ToolSpec` → `name`/`description`/
+  `input_schema`; assistant `tool_calls` → `tool_use` blocks; tool messages → `tool_result`
+  blocks, consecutive results (and a following user message) merged into one user turn.
+  Response `text` blocks → `content`, `tool_use` → `ToolCall`; usage `input_tokens` (+ cache
+  tokens) / `output_tokens`, `cost_usd=None` until pricing (#12).
+- `max_tokens` (required by Anthropic) falls back to the client default 1024. JSON
+  `response_format` is emulated with a system-prompt instruction (schema included for
+  `json_schema`); `text` ignored, other types raise `LLMError`.
+- No new dependencies. Optional live test: `AGENTLENS_LIVE_TESTS=1
+  AGENTLENS_LIVE_ANTHROPIC_MODEL=... ANTHROPIC_API_KEY=...`. 431 tests, 100% coverage.
+- Next: #12 Client factory from config/env + pricing table.

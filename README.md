@@ -73,6 +73,18 @@ request = LLMRequest(messages="Greet me in JSON", response_format={"type": "json
 print(llm.complete(request).content)  # e.g. {"greeting": "Hello!"}
 ```
 
+`AnthropicClient` speaks the Anthropic Messages API with the same `LLMRequest`/`LLMResponse`
+(system prompts, tools and tool results mapped for you; `max_tokens` defaults to 1024;
+JSON `response_format` becomes a system-prompt instruction):
+
+```python
+from agentlens.llm import AnthropicClient, LLMRequest, Message
+
+claude = AnthropicClient(model="claude-3-5-haiku-latest")  # API key from ANTHROPIC_API_KEY
+request = LLMRequest(messages=[Message.system("Be brief."), Message.user("Say hi")])
+print(claude.complete(request).content)  # e.g. Hi!
+```
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/).
