@@ -162,6 +162,32 @@ class LLMClient(Protocol):
 `LLMResponse(content, tool_calls, usage, raw)`. Factory: `get_client("openai:gpt-4o-mini")`,
 `"ollama:llama3.1"`, `"anthropic:claude-..."`, `"mock:scripted"`. Pricing table in YAML.
 
+Implementation notes (`src/agentlens/llm/`):
+- `types.py`: `Message(role, content, tool_calls, tool_call_id)` with roles
+  `system|user|assistant|tool`; validated so only assistant messages carry `tool_calls`, only
+  (and every) tool message has `tool_call_id`, and only assistant messages may omit `content`.
+  Constructors `Message.system/user/assistant/tool`. `ToolCall(id, name, arguments)` keeps
+  arguments **parsed** (`dict`), never a JSON string — adapters decode/encode at the edge.
+  `ToolSpec(name, description, parameters)` with a JSON Schema (default: empty object schema).
+- `LLMRequest`: `None` means "client default" for `model`/`temperature`/`max_tokens`;
+  `messages` also accepts a plain string on validation (YAML/JSON shorthand for one user
+  message). `canonical_json()` (sorted keys, compact, UTF-8) and `fingerprint()` (sha256 of it)
+  are the normalised request key for cassettes (§4) — equal models give equal keys regardless
+  of dict ordering.
+- `LLMResponse(content, tool_calls, usage, raw, model)`: `usage` is the shared
+  `schema.Usage` and is `None` when a provider reports nothing (unknown ≠ zero); `raw` keeps the
+  provider payload for debugging; `to_message()` turns it into the next assistant turn.
+- `LLMClient` is a `runtime_checkable` `Protocol` (structural: no base class to inherit).
+- `MockLLM(script, model="mock", cycle=False, default=None)`: script is a list (in order), a
+  callable `(request) -> item`, or a `{regex: item}` map searched (`re.search`, insertion order)
+  against the **last user message**. Items: `LLMResponse | str | ToolCall | list[ToolCall]`.
+  Exhausted list → `MockExhaustedError` by default (an agent making more calls than scripted is
+  usually a bug), unless `cycle=True` or a `default` is given; no regex match →
+  `default` or `MockNoMatchError`. Usage is deterministic: whitespace word counts of all request
+  messages (tool calls counted as `name + sorted-JSON args`) and of the response, `cost_usd=0`;
+  an item's own `usage`/`model` win. All requests are kept in `.requests`; thread-safe;
+  `acomplete` delegates to `complete`.
+
 ## 4. Replay
 - **Cassette**: during recording, each LLM/tool call is stored with
   `key = (call_index, sha256(normalised request))`. During playback the wrapped client returns
