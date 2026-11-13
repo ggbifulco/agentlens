@@ -451,6 +451,56 @@ Implementation notes (`src/agentlens/evals/`, #15, FR-E3):
   `__init__`), so `available_evaluators()` lists them without extra setup. Top-level re-exports:
   `agentlens.evaluator`, `agentlens.Evaluator`.
 
+Implementation notes (`src/agentlens/evals/builtin/`, #16, FR-E1 part 1):
+- Built-ins are classes (the class is the registry factory) in `evals/builtin/output.py`
+  (`ExactMatch`, `Contains`, `Regex`, `JsonSchema`) and `evals/builtin/trace_checks.py`
+  (`NoError`; #17's trace checks go there too). `evals/builtin/__init__.py` registers them in
+  `default_registry` at import of `agentlens.evals` (`register_builtins(registry=None)` fills a
+  fresh registry; `BUILTIN_EVALUATORS` maps name → (class, primary)). Primaries for the scalar
+  shorthand: `exact_match` → `value`, `contains` → `text`, `regex` → `pattern`, `json_schema` →
+  `schema`, `no_error` → `include_spans`. All results score 1/0 except `contains` (fraction).
+- **What output is checked.** `output_value(trace, path=None)` returns `trace.output` or the part
+  a `path` names: dotted string `"items.0.text"` or a list `["key.with.dots", 0]` (list indexes,
+  negative ok). With a path, a string output is parsed as JSON first. A missing path raises
+  `OutputPathError` (a `LookupError`), which evaluators turn into a *failed* result (the agent's
+  output lacks the field), not a config error. `to_text(value)` / `output_text(trace, path=)`:
+  a string as is, `None` stays `None`, anything else canonical JSON (`sort_keys`, default
+  `", "`/`": "` separators, `ensure_ascii=False`) — what `contains`/`regex` search.
+- Strings are always NFC-normalised before comparing (composed and decomposed accents are equal);
+  `case_sensitive=False` uses `str.casefold` (`"Straße"` = `"STRASSE"`); `normalise_whitespace`
+  collapses whitespace runs to one space. Flag params must be real booleans (YAML `"no"` is a
+  config error).
+- `exact_match(value=UNSET, case_sensitive=True, strip=True, normalise_whitespace=False,
+  path=None)`: **precedence** — the `value` param, else `case.expected`, else `evaluate` raises
+  `EvaluatorConfigError` (reported by `run_evaluator` as an evaluator error, not an agent
+  failure). `UNSET` sentinel so `{exact_match: {value: null}}` can expect a `null` output
+  (`{exact_match: null}` means "no params"). A string expectation compares text (non-string
+  output as canonical JSON); any other expectation compares structurally after parsing a string
+  output as JSON: key order ignored, `1 == 1.0`, but JSON types are tagged so `true != 1`; the
+  text options apply to nested strings.
+- `contains(text=None, mode="all"|"any", case_sensitive=True, normalise_whitespace=False,
+  path=None)`: `text` is a string or list (fallback `case.expected`); empty strings/lists are
+  rejected (they would always match). Score = fraction found in both modes; `all` passes only at
+  1.0, `any` with at least one. `None` output contains nothing. Details: `matched`, `missing`.
+- `regex(pattern, mode="search"|"match"|"fullmatch", ignore_case, multiline, dotall, path)`:
+  compiled in `__init__`, so an invalid pattern is an `EvaluatorConfigError` at suite load.
+  Details: `match`, `span`, `groups`, `named_groups`.
+- `json_schema(schema=None, parse_json=True, max_errors=5, path=None)`: schema param, else
+  `case.expected["schema"]`; checked with `validator_for(schema).check_schema` (draft from
+  `$schema`, default 2020-12). A string output is parsed as JSON (one surrounding Markdown code
+  fence tolerated — LLMs add them); `parse_json=False` validates it as a JSON string; `None` is
+  validated as `null`. All errors are collected (`iter_errors`), sorted by `json_path`; the reason
+  lists the first `max_errors` as `$.path: message`, `details["errors"]` = `{path, message,
+  validator}` + `error_count`. **Dependency**: `jsonschema` (runtime, + `types-jsonschema` dev):
+  full draft 4–2020-12 support, `$ref` resolution and precise error paths are too much to
+  hand-roll; it is the reference implementation (MIT, wheels everywhere; pulls `attrs`,
+  `referencing`, `jsonschema-specifications`, `rpds-py`).
+- `no_error(include_spans=True)`: fails on `trace.error` and, by default, on any span with
+  `error` — a tool/LLM call that raised even if the agent caught it, because a swallowed tool
+  error is usually a regression worth seeing (adapter HTTP retries happen inside one span, so
+  they do not count). `{no_error: {include_spans: false}}` checks only the run. Details list
+  the first 10 failed spans in start order.
+
 ## 6. Suites (YAML)
 ```yaml
 name: support-agent

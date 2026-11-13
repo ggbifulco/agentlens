@@ -261,3 +261,24 @@ Append-only log of development sessions (newest at the bottom).
   Top-level `agentlens.evaluator`, `agentlens.Evaluator`. README "Custom evaluators" section.
 - No new dependencies. 669 tests, 100% coverage; README example verified.
 - Next: #16 Deterministic output evaluators (exact, contains, regex, json_schema, no_error).
+
+## 2026-11-13 — #16 Deterministic output evaluators (exact, contains, regex, json_schema, no_error)
+- Added `agentlens.evals.builtin` (registered in `default_registry` on import of
+  `agentlens.evals`; `register_builtins(registry)`, `BUILTIN_EVALUATORS`): `ExactMatch`
+  (`exact_match`), `Contains` (`contains`), `Regex` (`regex`), `JsonSchema` (`json_schema`),
+  `NoError` (`no_error`). Shorthand primaries: `value`, `text`, `pattern`, `schema`,
+  `include_spans`. Each returns score + reason + details; bad params (invalid regex/schema,
+  unknown mode, non-bool flags) are `EvaluatorConfigError` at build time.
+- Output selection: `output_value(trace, path=)` (dotted path or list; a string output is
+  parsed as JSON when a path is given; missing path → `OutputPathError` → failed result),
+  `to_text`/`output_text` (str as is, `None` stays `None`, else canonical JSON). Strings are
+  NFC-normalised; `case_sensitive=False` = casefold; `normalise_whitespace` option.
+- `exact_match`: `value` param > `case.expected` > config error (`UNSET` sentinel so `null`
+  can be expected); string expectation → text compare, otherwise structural JSON compare
+  (`true != 1`). `contains`: str/list, `mode` all/any, score = fraction found. `regex`:
+  `mode` search/match/fullmatch + `ignore_case`/`multiline`/`dotall`. `json_schema`: schema or
+  `case.expected.schema`, string outputs parsed as JSON (code fence tolerated), first
+  `max_errors` errors in reason/details. `no_error`: `include_spans=True` by default.
+- New runtime dependency `jsonschema` (+ `types-jsonschema` dev). 861 tests, 100% coverage;
+  README example verified.
+- Next: #17 Trajectory evaluators (tool_sequence, max_steps, cost/latency budgets).
