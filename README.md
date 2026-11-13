@@ -188,6 +188,31 @@ Suites refer to evaluators by name (`no_error`, `{max_steps: 8}`, `{tool_sequenc
 ordered}}`); `agentlens.evals.register(name, factory)` adds class-based ones and
 `available_evaluators()` lists them.
 
+### Built-in output checks
+`exact_match`, `contains`, `regex`, `json_schema` and `no_error` are registered out of the box.
+Each returns a score in `[0, 1]`, a readable `reason` and `details`; bad parameters (an invalid
+regex or schema) fail when the suite is loaded. Text checks see a dict/list output as canonical
+JSON, and `path: answer` (or `items.0.text`) picks one field:
+
+```python
+import agentlens
+from agentlens.evals import evaluate_case
+from agentlens.schema import Case
+
+with agentlens.run("support") as trace:
+    trace.output = {"answer": "Refund issued for order 1234", "status": "refunded"}
+
+case = Case(id="refund", input="refund 1234", expected="Refund issued for order 1234")
+for result in evaluate_case(trace, case, [
+    "no_error",                                  # no exception in the run or its spans
+    {"exact_match": {"path": "answer"}},         # value defaults to case.expected
+    {"contains": {"text": ["refund", "1234"], "case_sensitive": False}},
+    {"regex": {"pattern": r"order \d{4}", "path": "answer"}},
+    {"json_schema": {"schema": {"type": "object", "required": ["answer", "status"]}}},
+]):
+    print(result.evaluator, result.score, result.reason)
+```
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/).
