@@ -282,3 +282,23 @@ Append-only log of development sessions (newest at the bottom).
 - New runtime dependency `jsonschema` (+ `types-jsonschema` dev). 861 tests, 100% coverage;
   README example verified.
 - Next: #17 Trajectory evaluators (tool_sequence, max_steps, cost/latency budgets).
+
+## 2026-11-13 — #17 Trajectory evaluators (tool_sequence, max_steps, cost/latency budgets)
+- Added to `agentlens.evals.builtin.trace_checks` (registered on import, re-exported from
+  `agentlens.evals`): `ToolSequence` (`tool_sequence`, primary `tools`), `MaxSteps`
+  (`max_steps`, `value`), `CostBudget` (`cost_budget`, `max_usd`), `LatencyBudget`
+  (`latency_budget`, `max_ms`). Bad limits/modes are `EvaluatorConfigError` at build time.
+- `tool_sequence(tools=None, mode="ordered"|"strict"|"subset", allow_extra=True, forbidden=None)`:
+  expected tools from `tools`, else `case.expected["tools"]`; repeats count (multiset). Scores:
+  strict `LCS / max(len)` (1 only on exact match), ordered `LCS / len(expected)` (subsequence),
+  subset `matched / len(expected)` (any order). `allow_extra=False` fails on calls to tools
+  outside the list; `forbidden` calls score 0. Reason shows expected vs actual; details list
+  `missing`, `unexpected`, `forbidden_called`.
+- Budgets: pass iff `actual <= limit`, score 1 within else `limit / actual`. `max_steps` uses
+  `trace.n_steps`; `latency_budget` fails a running trace (`latency_ms=None`); `cost_budget`
+  fails on unknown/partial cost by default (`on_unknown: pass` to accept; a known part already
+  over budget fails regardless).
+- Shared helpers `check_choice`, `check_number`, `params_repr` moved to `builtin/_common.py`.
+  Tests use a synthetic-trace builder (`tests/evals/builtin/conftest.py::build_trace`).
+- No new dependencies. 954 tests, 100% coverage; README example verified.
+- Next: #18 LLM-as-judge evaluators (rubric 1-5, pass/fail) with caching.
