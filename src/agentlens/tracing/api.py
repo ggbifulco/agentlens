@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Any, ParamSpec, TypeVar, cast, overload
 
-from agentlens.schema import Span, SpanKind, Trace
+from agentlens.schema import Span, SpanKind, Trace, Usage
 from agentlens.tracing._serialize import bind_arguments
 from agentlens.tracing.recorder import Recorder, TraceSink
 from agentlens.tracing.redaction import DEFAULT_REDACTOR, Redactor
@@ -176,13 +176,29 @@ def _open(
 
 
 def _close(
-    opened: _OpenSpan | None, *, output: object = None, error: BaseException | None = None
+    opened: _OpenSpan | None,
+    *,
+    output: object = None,
+    output_factory: Callable[[], object] | None = None,
+    error: BaseException | None = None,
+    usage: Usage | None = None,
+    attributes: Mapping[str, object] | None = None,
 ) -> None:
+    """End a span opened by :func:`_open`; never raises.
+
+    ``output_factory`` (only called on success) lets callers defer building the
+    output until here, so a failure while building it is logged like any other
+    recording problem instead of reaching user code.
+    """
     if opened is None:
         return
     _reset(_current_span, opened.token)
     try:
-        opened.recorder.end_span(opened.span, output=output, error=error)
+        if error is None and output_factory is not None:
+            output = output_factory()
+        opened.recorder.end_span(
+            opened.span, output=output, error=error, usage=usage, attributes=attributes
+        )
     except Exception:
         logger.exception("could not end span %r", opened.span.name)
 
@@ -218,6 +234,14 @@ def span(
 
 
 # -- decorator -------------------------------------------------------------------
+
+
+def _signature(fn: Callable[..., Any]) -> inspect.Signature | None:
+    """``inspect.signature(fn)``, or ``None`` for callables without one (some builtins)."""
+    try:
+        return inspect.signature(fn)
+    except (TypeError, ValueError):
+        return None
 
 
 @overload
@@ -264,8 +288,8 @@ def trace(
     def decorate(fn: Callable[P, R]) -> Callable[P, R]:
         if inspect.isgeneratorfunction(fn) or inspect.isasyncgenfunction(fn):
             raise TypeError(f"@trace does not support generator functions ({fn.__qualname__})")
-        span_name = name or fn.__qualname__
-        signature = inspect.signature(fn)
+        span_name = name or getattr(fn, "__qualname__", None) or type(fn).__qualname__
+        signature = _signature(fn)
 
         if inspect.iscoroutinefunction(fn):
             async_fn = cast(Callable[..., Awaitable[Any]], fn)

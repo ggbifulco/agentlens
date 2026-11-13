@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping
 
 from pydantic import JsonValue
 
-from agentlens.schema import Span, SpanKind, Trace
+from agentlens.schema import Span, SpanKind, Trace, Usage
 from agentlens.schema._base import utc_now
 from agentlens.tracing._serialize import format_exception, to_json_value
 from agentlens.tracing.redaction import DEFAULT_REDACTOR, Redactor, redact_trace
@@ -91,9 +91,24 @@ class Recorder:
         return span
 
     def end_span(
-        self, span: Span, *, output: object = None, error: BaseException | None = None
+        self,
+        span: Span,
+        *,
+        output: object = None,
+        error: BaseException | None = None,
+        usage: Usage | None = None,
+        attributes: Mapping[str, object] | None = None,
     ) -> None:
-        """Close ``span`` with its output, or with the exception that ended it."""
+        """Close ``span`` with its output, or with the exception that ended it.
+
+        ``usage`` (token counts of an LLM call) and ``attributes`` known only
+        once the work is done (e.g. the model that answered) are added as well;
+        ``attributes`` are merged into the ones given at start.
+        """
+        if usage is not None:
+            span.usage = usage
+        if attributes:
+            span.attributes = {**span.attributes, **_json_mapping(attributes)}
         if error is not None:
             span.error = format_exception(error)
         else:
