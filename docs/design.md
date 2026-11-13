@@ -114,6 +114,37 @@ Implementation notes (`src/agentlens/tracing/`):
   the sink (losing a trace beats persisting a secret); the agent is never affected (FR-T5).
   Stores and `import_jsonl` do not redact on their own: call `redact_trace` before
   `store.save_trace` for traces recorded outside `run`.
+- Auto-tracing (`tracing/wrappers.py`): `wrap_llm(client, name=, provider=, include_raw=False)`
+  returns a `TracedLLM` — itself an `LLMClient` — whose `complete`/`acomplete` record an
+  `llm_call` span. Name: `name`, else `request.model`, else the client's `model` attribute, else
+  the class name. Input: the `LLMRequest` JSON with default fields omitted (still validates back
+  into an equal `LLMRequest`). Output: the `LLMResponse` JSON without `usage` (stored on
+  `span.usage`, so `Trace.total_tokens/total_cost` work) and without `raw` (provider payloads are
+  bulky and may hold ids/headers) unless `include_raw=True`. Attributes: `client`
+  (`module.Class`), `provider` (argument or the client's string `provider` attribute; omitted if
+  unknown), `model`, `temperature`, `max_tokens`, `n_messages`, `n_tools`, `tool_names`,
+  `response_format` (its `type`), `request_hash` (`LLMRequest.fingerprint()`, the cassette key of
+  ADR 0004) and, after the call, `response_model` and `n_tool_calls`. Unknown attributes are
+  delegated to the wrapped client (`llm.requests` on a wrapped `MockLLM`); wrapping a
+  `TracedLLM` again returns it unchanged.
+- `wrap_tool(fn, name=)` / `@wrap_tool` / `@wrap_tool(name=...)` is `@trace(kind="tool_call")`
+  with tool naming: the span name is `name` or `fn.__name__` (not `__qualname__`: it is the
+  tool name that `Trace.tool_calls`/`tool_sequence` compare). It accepts any callable
+  (`functools.partial`, objects with `__call__`, builtins without a signature → raw
+  `args`/`kwargs` as input). The wrapper carries `__wrapped__` and `__agentlens_tool__`
+  (`TOOL_NAME_ATTR`); re-wrapping returns it unchanged, or re-wraps the original under a new
+  name, so a tool never produces two nested spans.
+- Both are no-op passthroughs outside `run` (one `ContextVar.get`, no request hashing or
+  serialisation). Client/tool exceptions are recorded (`"Type: message"`) and re-raised.
+  Attribute building and output serialisation run behind the FR-T5 guards
+  (`_close(output_factory=...)` evaluates the output inside the guard), so even a client that
+  returns a non-`LLMResponse` or a dump that raises only produces a log line.
+  `Recorder.end_span(usage=, attributes=)` records usage and merges late attributes.
+  Measured overhead ≈ 65 µs per `llm_call` span with `MockLLM` (checked in `test_overhead.py`).
+- Replay (#13) builds on this: a cassette is an `LLMClient` wrapping the real one, so
+  `wrap_llm(cassette)` traces playback exactly like live calls, and a recorded trace already
+  holds per-call `request_hash` + request/response JSON (call index = order of `llm_call`
+  spans) to build a cassette from. Tool playback can hook in via `__agentlens_tool__`.
 
 ## 2b. Store (`agentlens.store`, ADR 0003)
 - `Store` protocol (`runtime_checkable`): `save_trace(trace, experiment_id=)`, `get_trace`,
