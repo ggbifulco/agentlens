@@ -93,6 +93,27 @@ Implementation notes (`src/agentlens/tracing/`):
 - Every recorder operation runs behind a guard that logs to the `agentlens.tracing` logger;
   user exceptions (including `CancelledError`) are recorded as `"Type: message"` and re-raised.
 - Measured overhead ≈ 40 µs/span (budget 5 ms, checked by `tests/tracing/test_overhead.py`).
+- Redaction (`tracing/redaction.py`, NFR-5): a `Redactor` is any `Callable[[JsonValue], JsonValue]`
+  (no protocol class: a plain function or lambda is enough). `run(..., redactor=)` defaults to
+  `DEFAULT_REDACTOR`; `None` disables it. It is applied once, in `Recorder.finish`, to a
+  *copy* built by `redact_trace(trace, redactor)`: trace input/output/metadata/error and span
+  input/output/attributes/error; ids, names, timings and usage are untouched. The sink gets the
+  copy, while the live trace yielded to user code stays unredacted (in-process code already
+  holds those values; the boundary NFR-5 protects is persistence). Redacting at finish rather
+  than per span keeps the hot path cheap and also covers fields user code sets directly
+  (`trace.output = ...`).
+- `PatternRedactor(patterns=, keys=, replacement="[REDACTED]")` walks nested dicts/lists without
+  mutating them. Mapping keys are compared case-insensitively with `-` ≡ `_`; a sensitive key
+  (`api_key`, `authorization`, `password`, `token`, `client_secret`, `cookie`, ..., or any key
+  ending in `_api_key`/`_secret`/`_password`) has its whole value masked. Strings are scanned
+  with `DEFAULT_PATTERNS`: PEM private keys, `sk-...` (OpenAI and Anthropic `sk-ant-`),
+  `Bearer <token>`, AWS `AKIA`/`ASIA`, GitHub `gh?_`/`github_pat_`, Google `AIza`, Slack
+  `xox?-`, JWTs and `api_key=...`/`password: ...` assignments. A named group `secret` limits
+  masking to that part (`Bearer [REDACTED]`). Custom redactor results are coerced back to JSON.
+- Fail closed: if the redactor raises, the error is logged and the trace is **not** passed to
+  the sink (losing a trace beats persisting a secret); the agent is never affected (FR-T5).
+  Stores and `import_jsonl` do not redact on their own: call `redact_trace` before
+  `store.save_trace` for traces recorded outside `run`.
 
 ## 2b. Store (`agentlens.store`, ADR 0003)
 - `Store` protocol (`runtime_checkable`): `save_trace(trace, experiment_id=)`, `get_trace`,

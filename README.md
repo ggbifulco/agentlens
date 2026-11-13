@@ -45,6 +45,12 @@ print(trace.tool_calls, trace.n_steps, f"{trace.latency_ms:.2f} ms")
 Spans nest automatically across `async`/`await`, `asyncio.gather` and `asyncio.to_thread`
 (context lives in `contextvars`); outside a `run` the decorators are a no-op.
 
+Before a finished trace reaches its sink (e.g. `store.save_trace`), secrets are masked:
+values under keys such as `api_key`/`authorization` and strings that look like API keys
+(`sk-...`, `Bearer ...`, `AKIA...`, `ghp_...`) become `[REDACTED]`. Pass your own
+`redactor=` (any `Callable[[JsonValue], JsonValue]`, e.g. a configured
+`agentlens.PatternRedactor`) or use `agentlens.redact_trace(trace)` standalone.
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/).
