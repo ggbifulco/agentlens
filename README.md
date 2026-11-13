@@ -22,7 +22,8 @@ AgentLens turns agent runs into a **statistically sound regression suite** that 
 
 ## Quick look: recording a trace
 Tracing works today (`agentlens.run`, `@agentlens.trace`, `agentlens.wrap_llm`,
-`agentlens.wrap_tool`); storage and cassette replay are in place, evaluation is next.
+`agentlens.wrap_tool`); storage, cassette replay and the evaluator interface are in place,
+built-in evaluators are next.
 
 ```python
 import agentlens
@@ -157,6 +158,35 @@ print(trace.metadata["replay_divergence"]["index"])  # 0
 ```
 
 `find_divergence(recorded_trace, replayed_trace, kind="llm")` compares two traces the same way.
+
+## Custom evaluators
+An evaluator scores one trace of one case. Write one as a function with `@agentlens.evaluator`;
+it may return a `bool`, a score in `[0, 1]` (passes at `>= threshold`, default 0.5),
+`(score, reason)` or a full `EvalResult`. Extra parameters come from the suite spec, and an
+evaluator that raises gives a failed result instead of crashing the run:
+
+```python
+import agentlens
+from agentlens.evals import evaluate_case, get_evaluator
+from agentlens.schema import Case
+
+@agentlens.evaluator(threshold=0.8)
+def short_answer(trace, case, max_words: int = 50):
+    words = len(str(trace.output).split())
+    return min(1.0, max_words / max(words, 1)), f"{words} words"
+
+with agentlens.run("support") as trace:
+    trace.output = "Your refund for order 1234 has been issued."
+
+case = Case(id="refund", input="refund 1234", evaluators=["short_answer"])
+print(evaluate_case(trace, case)[0].passed)  # True: 8 words <= 50
+check = get_evaluator({"short_answer": 4})  # YAML shorthand: scalar -> first parameter
+print(check.evaluate(trace, case).reason)  # "8 words" (score 0.5 < 0.8: failed)
+```
+
+Suites refer to evaluators by name (`no_error`, `{max_steps: 8}`, `{tool_sequence: {mode:
+ordered}}`); `agentlens.evals.register(name, factory)` adds class-based ones and
+`available_evaluators()` lists them.
 
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
