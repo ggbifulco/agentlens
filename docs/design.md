@@ -248,6 +248,32 @@ Implementation notes (`src/agentlens/llm/`):
   completion_tokens, cost_usd=None)` (pricing is #12), `None` if not reported; `raw` is the
   response body only. `provider` (read by `wrap_llm`) defaults to `"openai"` for the official
   URL and `"openai_compat"` otherwise. The key is kept private and excluded from `repr`.
+- `anthropic.py`: `AnthropicClient(model=None, *, base_url="https://api.anthropic.com",
+  api_key=None, max_tokens=1024, timeout=60, max_retries=2, retry_policy=None, headers=None,
+  provider="anthropic", http_client=None, async_http_client=None)` posts to
+  `{base_url}/v1/messages` through the same `JSONHTTPClient` (529 "overloaded" is a retried
+  5xx). Headers: `anthropic-version: 2023-06-01` (overridable via `headers`) and `x-api-key`
+  from the argument, else `ANTHROPIC_API_KEY`, else none (`api_key=""` never sends one).
+  Request mapping: every `system` message, wherever it appears, is joined (blank line) into the
+  top-level `system` string; `ToolSpec` → `{name, description?, input_schema}`; assistant
+  `tool_calls` → `tool_use` blocks after an optional text block (empty text is dropped, as the
+  API rejects it); `tool` messages → `tool_result` blocks in a `user` turn, merged with the
+  previous user turn when that one already holds tool results — so the results of one assistant
+  turn (and a user message right after them) form a single user turn; other messages keep plain
+  string content. `max_tokens` is mandatory for Anthropic: request value, else the client's
+  `max_tokens` (default `DEFAULT_MAX_TOKENS = 1024`). `temperature` only when set.
+  **`response_format`**: Anthropic has no JSON mode, so `json_object`/`json_schema` are emulated
+  by appending an instruction ("Respond only with a single valid JSON object…", plus the schema
+  for `json_schema`) to the system prompt; `{"type": "text"}` is a no-op and other types raise
+  `LLMError` (fail loudly rather than silently ignore). The answer is not validated as JSON —
+  that is the `json_schema` evaluator's job. Chosen over ignoring the field (judges asking for
+  JSON would get prose) and over tool-forcing (`tool_choice` with a synthetic tool), which would
+  change the response shape (`tool_calls` instead of `content`) and differ from the other
+  adapters. Response: `text` blocks concatenated into `content` (`None` if none), `tool_use`
+  blocks → `ToolCall` (`input` must be an object; missing ids → `toolu_<index>`), other blocks
+  (e.g. `thinking`) ignored but kept in `raw`; `usage.input_tokens` = `input_tokens` +
+  `cache_creation_input_tokens` + `cache_read_input_tokens` (all are prompt tokens; `Usage`
+  has no cache fields), `output_tokens` as is, `cost_usd=None` until pricing (#12).
 
 ## 4. Replay
 - **Cassette**: during recording, each LLM/tool call is stored with
