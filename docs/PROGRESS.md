@@ -196,3 +196,26 @@ Append-only log of development sessions (newest at the bottom).
 - New deps: `pyyaml` (runtime: pricing table now, suites/gates YAML in #20) and
   `types-PyYAML` (dev, mypy). 519 tests, 100% coverage; wheel verified to ship `pricing.yaml`.
 - Next: #13 Cassette record/playback (strict / lenient / fallthrough).
+
+## 2026-11-13 — #13 Cassette record/playback (strict / lenient / fallthrough)
+- Added `agentlens.replay`: `Cassette(entries=(), *, mode="record", record_new=False,
+  metadata=None)` with `wrap_llm(client=None, *, model=, provider=)` → `CassetteLLM` (an
+  `LLMClient`, `complete`/`acomplete`) and `wrap_tool(fn, name=)` (wrapper or decorator, sync
+  and async); `save(path)`, `Cassette.load(path, mode="strict", record_new=False)`,
+  `Cassette.from_trace(trace)`, `entries`, `entries_of(kind)`, `unplayed`, `rewind()`.
+  Also `CassetteEntry`, `CassetteHeader`, `tool_key`, `CassetteMode`, `EntryKind`.
+- Calls keyed by `(index, key)`: index per kind (`llm`/`tool`), key = `LLMRequest.fingerprint()`
+  (= span `request_hash`) or sha256 of canonical `{"name", "arguments"}` for tools. Modes:
+  `record`, `strict` (key + tool name must match), `lenient` (index only), `fallthrough`
+  (miss → real client/tool, stored only with `record_new=True`).
+- Errors: `CassetteError` > `CassetteMissError(kind, index, mode, expected, actual_request,
+  actual_key, actual_name)` (+ `expected_request`, base for #14's `ReplayDivergence`) and
+  `CassetteFormatError(path:line)` (also a `ValueError`). Real-call errors are not recorded and
+  free the index; calls inside a real tool bypass the cassette (they vanish on playback).
+- JSONL format: header `{"format": "agentlens-cassette", "version": 1, "metadata": {...}}`
+  (optional on load; carries the client's `model`/`provider` so playback without a client keeps
+  span names), then one entry per line in recording order; atomic writes.
+- Acceptance test: a MockLLM + tool run recorded, saved, loaded and replayed (strict, lenient,
+  fallthrough, async, from_trace) against a failing client gives an identical trace.
+- No new dependencies. 566 tests, 100% coverage.
+- Next: #14 Replay divergence detection and request diff.
