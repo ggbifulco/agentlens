@@ -58,3 +58,19 @@ Append-only log of development sessions (newest at the bottom).
   back to `repr()`. Generator functions are rejected by `@trace` (not supported yet).
 - Benchmark test: ~40 µs/span overhead (budget 5 ms). 101 tests, 100% coverage.
 - Next: #5 Store protocol and SQLiteStore.
+
+## 2026-11-13 — #5 Store protocol and SQLiteStore
+- Housekeeping: squash-merged PR #38 (#4 tracing, CI green, no maintainer feedback) per
+  `MERGE_POLICY: auto`; the previous session's guard had blocked the self-merge.
+- Added `agentlens.store`: `Store` protocol (runtime-checkable), `SQLiteStore`, `StoreError`,
+  `SchemaVersionError`. Traces, experiments and eval results stored as JSON documents plus
+  indexed filter columns; upsert semantics; `save_trace` works directly as a tracing sink.
+- Filters: traces by name / experiment / metadata scalar equality (`json_each`, type-aware),
+  newest first with `limit`; experiments by name / suite / baseline flag.
+- Eval results: per-trace ordered list, replaced on save; `list_eval_results(experiment_id)`
+  groups them by trace for the comparator.
+- Migrations versioned in code (`MIGRATIONS` + `PRAGMA user_version`), one transaction each;
+  newer databases are refused. Thread-safe single connection (RLock).
+- No new dependencies (stdlib `sqlite3`). Tests on `tmp_path` databases + Hypothesis
+  round-trip; 136 tests, 100% coverage.
+- Next: #6 JSONL export/import of traces.
