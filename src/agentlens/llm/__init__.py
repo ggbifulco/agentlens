@@ -11,10 +11,17 @@ Anthropic) without code changes::
     assert response.content == "Hi! How can I help?"
 
 Real providers: :class:`OpenAICompatClient` (OpenAI, Ollama, vLLM, LM Studio via
-``base_url``). Adapter failures raise subclasses of :class:`LLMError`.
+``base_url``) and :class:`AnthropicClient` (Anthropic Messages API).
+Adapter failures raise subclasses of :class:`LLMError`.
 """
 
 from agentlens.llm._http import RetryPolicy
+from agentlens.llm.anthropic import (
+    ANTHROPIC_VERSION,
+    DEFAULT_ANTHROPIC_BASE_URL,
+    DEFAULT_MAX_TOKENS,
+    AnthropicClient,
+)
 from agentlens.llm.base import LLMClient
 from agentlens.llm.errors import (
     LLMConnectionError,
@@ -36,7 +43,11 @@ from agentlens.llm.openai_compat import DEFAULT_OPENAI_BASE_URL, OpenAICompatCli
 from agentlens.llm.types import LLMRequest, LLMResponse, Message, Role, ToolCall, ToolSpec
 
 __all__ = [
+    "ANTHROPIC_VERSION",
+    "DEFAULT_ANTHROPIC_BASE_URL",
+    "DEFAULT_MAX_TOKENS",
     "DEFAULT_OPENAI_BASE_URL",
+    "AnthropicClient",
     "LLMClient",
     "LLMConnectionError",
     "LLMError",
