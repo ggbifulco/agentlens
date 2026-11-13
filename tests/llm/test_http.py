@@ -245,6 +245,7 @@ class TestErrorDetail:
         [
             ({"json": {"message": "top-level"}}, "top-level"),
             ({"json": {"error": {"code": 1}}}, '{"error":{"code":1}}'),
+            ({"json": {"error": 5}}, '{"error":5}'),
             ({"text": ""}, "Bad Request"),
         ],
     )
