@@ -21,9 +21,8 @@ from __future__ import annotations
 import contextlib
 import json
 import re
-from collections.abc import Mapping
 from enum import Enum
-from typing import Any, Final, Literal
+from typing import Final, Literal
 
 import jsonschema
 import jsonschema.exceptions
@@ -35,10 +34,12 @@ from agentlens.evals.builtin._common import (
     OutputPath,
     OutputPathError,
     check_bool,
+    check_choice,
     check_path,
     clip,
     normalise_text,
     output_value,
+    params_repr,
     preview,
     to_text,
 )
@@ -62,18 +63,6 @@ UNSET: Final = _Unset.UNSET
 
 def _fail(name: str, reason: str, **details: JsonValue) -> EvalResult:
     return EvalResult(evaluator=name, score=0.0, passed=False, reason=reason, details=details)
-
-
-def _choice(param: str, value: object, allowed: tuple[str, ...]) -> str:
-    if not isinstance(value, str) or value not in allowed:
-        options = ", ".join(repr(a) for a in allowed)
-        raise EvaluatorConfigError(f"{param} must be one of {options}, got {value!r}")
-    return value
-
-
-def _params_repr(cls_name: str, params: Mapping[str, Any]) -> str:
-    shown = ", ".join(f"{k}={v!r}" for k, v in params.items())
-    return f"{cls_name}({shown})"
 
 
 def _json_text(value: JsonValue) -> str:
@@ -204,7 +193,7 @@ class ExactMatch:
         )
 
     def __repr__(self) -> str:
-        return _params_repr(
+        return params_repr(
             "ExactMatch",
             {
                 "value": self.value,
@@ -264,7 +253,7 @@ class Contains:
         path: OutputPath | None = None,
     ) -> None:
         self.text = None if text is None else _check_needles("text", text)
-        self.mode = _choice("mode", mode, ("all", "any"))
+        self.mode = check_choice("mode", mode, ("all", "any"))
         self.case_sensitive = check_bool("case_sensitive", case_sensitive)
         self.normalise_whitespace = check_bool("normalise_whitespace", normalise_whitespace)
         check_path(path)
@@ -319,7 +308,7 @@ class Contains:
         )
 
     def __repr__(self) -> str:
-        return _params_repr(
+        return params_repr(
             "Contains",
             {
                 "text": self.text,
@@ -378,7 +367,7 @@ class Regex:
         if not isinstance(pattern, str) or not pattern:
             raise EvaluatorConfigError(f"pattern must be a non-empty string, got {pattern!r}")
         self.pattern = pattern
-        self.mode = _choice("mode", mode, ("search", "match", "fullmatch"))
+        self.mode = check_choice("mode", mode, ("search", "match", "fullmatch"))
         self.ignore_case = check_bool("ignore_case", ignore_case)
         self.multiline = check_bool("multiline", multiline)
         self.dotall = check_bool("dotall", dotall)
@@ -432,7 +421,7 @@ class Regex:
         )
 
     def __repr__(self) -> str:
-        return _params_repr(
+        return params_repr(
             "Regex",
             {
                 "pattern": self.pattern,
@@ -571,7 +560,7 @@ class JsonSchema:
         )
 
     def __repr__(self) -> str:
-        return _params_repr(
+        return params_repr(
             "JsonSchema",
             {
                 "schema": self.schema,

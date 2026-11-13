@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import unicodedata
-from collections.abc import Sequence
-from typing import TypeAlias
+from collections.abc import Mapping, Sequence
+from typing import Any, TypeAlias
 
 from pydantic import JsonValue
 
@@ -17,11 +18,14 @@ __all__ = [
     "OutputPath",
     "OutputPathError",
     "check_bool",
+    "check_choice",
+    "check_number",
     "check_path",
     "clip",
     "normalise_text",
     "output_text",
     "output_value",
+    "params_repr",
     "preview",
     "to_text",
 ]
@@ -173,3 +177,35 @@ def check_bool(name: str, value: object) -> bool:
     if not isinstance(value, bool):
         raise EvaluatorConfigError(f"{name} must be true or false, got {value!r}")
     return value
+
+
+def check_choice(name: str, value: object, allowed: tuple[str, ...]) -> str:
+    """Reject a ``value`` that is not one of the ``allowed`` strings (modes, policies...)."""
+    if not isinstance(value, str) or value not in allowed:
+        options = ", ".join(repr(a) for a in allowed)
+        raise EvaluatorConfigError(f"{name} must be one of {options}, got {value!r}")
+    return value
+
+
+def check_number(name: str, value: object, *, integer: bool = False) -> float:
+    """Validate a limit parameter: a finite number ``>= 0`` (an ``int`` if ``integer``).
+
+    Booleans, strings, ``NaN`` and infinities are rejected (a YAML ``"8"`` or ``.inf``
+    is a config error rather than a silently disabled budget).
+    """
+    kinds = int if integer else (int, float)
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, kinds)
+        or not math.isfinite(value)
+        or value < 0
+    ):
+        what = "an integer" if integer else "a finite number"
+        raise EvaluatorConfigError(f"{name} must be {what} >= 0, got {value!r}")
+    return value
+
+
+def params_repr(cls_name: str, params: Mapping[str, Any]) -> str:
+    """``ClassName(k=v, ...)`` — the ``repr`` of a built-in evaluator."""
+    shown = ", ".join(f"{k}={v!r}" for k, v in params.items())
+    return f"{cls_name}({shown})"

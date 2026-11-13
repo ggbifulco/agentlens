@@ -18,11 +18,15 @@ spellings of :class:`~agentlens.schema.EvaluatorSpec`::
     results = evaluate_case(trace, case, ["mentions_order"])
 
 Built-in evaluators (:mod:`agentlens.evals.builtin`: ``exact_match``,
-``contains``, ``regex``, ``json_schema``, ``no_error``) register themselves in
+``contains``, ``regex``, ``json_schema``, ``no_error``, ``tool_sequence``,
+``max_steps``, ``cost_budget``, ``latency_budget``) register themselves in
 :data:`default_registry` when this package is imported::
 
     results = evaluate_case(trace, case, ["no_error", {"contains": "refund"},
-                                          {"regex": {"pattern": r"order \d+"}}])
+                                          {"regex": {"pattern": r"order \d+"}},
+                                          {"tool_sequence": {"mode": "ordered"}},
+                                          {"max_steps": 8}])
+
 An evaluator that raises never crashes a run: :func:`run_evaluator` and
 ``@evaluator`` turn the exception into a failed :class:`~agentlens.schema.EvalResult`.
 Configuration errors (unknown name, bad parameters) are raised eagerly.
@@ -38,12 +42,16 @@ from agentlens.evals.base import (
 from agentlens.evals.builtin import (
     UNSET,
     Contains,
+    CostBudget,
     ExactMatch,
     JsonSchema,
+    LatencyBudget,
+    MaxSteps,
     NoError,
     OutputPath,
     OutputPathError,
     Regex,
+    ToolSequence,
     output_text,
     output_value,
     register_builtins,
@@ -80,6 +88,7 @@ __all__ = [
     "UNSET",
     "AsyncEvaluator",
     "Contains",
+    "CostBudget",
     "DuplicateEvaluatorError",
     "Evaluator",
     "EvaluatorConfigError",
@@ -89,12 +98,15 @@ __all__ = [
     "ExactMatch",
     "FunctionEvaluator",
     "JsonSchema",
+    "LatencyBudget",
+    "MaxSteps",
     "NoError",
     "OutputPath",
     "OutputPathError",
     "Regex",
     "RegisteredEvaluator",
     "SpecLike",
+    "ToolSequence",
     "UnknownEvaluatorError",
     "aevaluate_case",
     "arun_evaluator",
