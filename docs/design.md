@@ -78,6 +78,22 @@ Implementation notes (`src/agentlens/schema/`):
   are logged, never raised into user code (FR-T5).
 - Redaction: pluggable `Redactor` applied before persistence (default: API-key patterns).
 
+Implementation notes (`src/agentlens/tracing/`):
+- `run(name, input=, metadata=, sink=)` yields the live `Trace`; on exit it sets `end_time`
+  (and `error` if the block raised, then re-raises) and calls `sink(trace)` once. Until the
+  `Store` exists (#5) a sink is any `Callable[[Trace], None]` (e.g. `store.save_trace`).
+- Two `ContextVar`s hold the current `Recorder` and the innermost open `Span`. A span's parent
+  is the current span when it starts; `run` resets the current span so nested runs are
+  independent traces. Plain `threading.Thread`s do not inherit the context (no recording);
+  use `asyncio.to_thread` or `contextvars.copy_context().run` to carry it over.
+- `@trace(kind=, name=)` (also bare `@trace`) wraps sync and async functions; generator
+  functions are rejected at decoration time. Span input = bound arguments without
+  `self`/`cls`; output = return value. `span(name, kind=)` is the context-manager equivalent.
+- Values are converted to JSON with pydantic's serializer, falling back to `repr()`.
+- Every recorder operation runs behind a guard that logs to the `agentlens.tracing` logger;
+  user exceptions (including `CancelledError`) are recorded as `"Type: message"` and re-raised.
+- Measured overhead ≈ 40 µs/span (budget 5 ms, checked by `tests/tracing/test_overhead.py`).
+
 ## 3. LLM adapters
 ```python
 class LLMClient(Protocol):

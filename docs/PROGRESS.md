@@ -44,3 +44,17 @@ Append-only log of development sessions (newest at the bottom).
 - Tests: unit tests + Hypothesis JSON round-trip for every model; reusable strategies in
   `tests/schema/strategies.py`. 64 tests, 100% coverage.
 - Next: #4 Tracing context and recorder.
+
+## 2026-11-12 — #4 Tracing context and recorder
+- Added `agentlens.tracing` (PR #38): `run(name, input=, metadata=, sink=)` context manager
+  yielding the live `Trace`; `@trace(kind=, name=)` (also bare) for sync and async functions;
+  `span()` context manager; `current_trace()` / `current_span()`. All re-exported from `agentlens`.
+- `Recorder` buffers spans on the trace (thread-safe append) and calls the sink once on finish;
+  a sink is any `Callable[[Trace], None]` until the `Store` lands in #5.
+- Context in two `ContextVar`s → correct nesting across `asyncio.gather`, `asyncio.to_thread` and
+  `copy_context().run`; plain threads are intentionally not recorded. Nested runs are independent.
+- FR-T5: recorder/sink failures are logged on `agentlens.tracing`, never raised; user exceptions
+  (incl. `CancelledError`) are stored as `"Type: message"` and re-raised. Non-JSON values fall
+  back to `repr()`. Generator functions are rejected by `@trace` (not supported yet).
+- Benchmark test: ~40 µs/span overhead (budget 5 ms). 101 tests, 100% coverage.
+- Next: #5 Store protocol and SQLiteStore.

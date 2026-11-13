@@ -20,6 +20,31 @@ AgentLens turns agent runs into a **statistically sound regression suite** that 
 - 🚦 **Gate** PRs in CI and post a report as a PR comment.
 - 🔌 **Swappable models**: mock, OpenAI-compatible (OpenAI, Ollama, vLLM), Anthropic.
 
+## Quick look: recording a trace
+Tracing works today (`agentlens.run` + `@agentlens.trace`); storage, replay and evaluation are next.
+
+```python
+import agentlens
+
+@agentlens.trace(kind="tool_call")
+def lookup_order(order_id: str) -> dict[str, str]:
+    return {"id": order_id, "status": "shipped"}
+
+@agentlens.trace(kind="agent_step")
+def agent(question: str) -> str:
+    order = lookup_order("1234")
+    return f"Order {order['id']} is {order['status']}"
+
+with agentlens.run("support-agent", input="Where is order 1234?") as trace:
+    trace.output = agent("Where is order 1234?")
+
+print(trace.tool_calls, trace.n_steps, f"{trace.latency_ms:.2f} ms")
+# ['lookup_order'] 1 0.12 ms
+```
+
+Spans nest automatically across `async`/`await`, `asyncio.gather` and `asyncio.to_thread`
+(context lives in `contextvars`); outside a `run` the decorators are a no-op.
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/).
