@@ -218,6 +218,36 @@ Implementation notes (`src/agentlens/llm/`):
   messages (tool calls counted as `name + sorted-JSON args`) and of the response, `cost_usd=0`;
   an item's own `usage`/`model` win. All requests are kept in `.requests`; thread-safe;
   `acomplete` delegates to `complete`.
+- `errors.py`: adapter failures derive from `LLMError` — `LLMHTTPError(status_code, body)`
+  (with `LLMRateLimitError` for 429), `LLMConnectionError` (with `LLMTimeoutError`) after the
+  retries are exhausted, and `LLMResponseError` for 2xx answers that cannot be understood (not
+  JSON, no choices, tool arguments that are not a JSON object). Messages carry the provider's
+  error message and the URL without query string, never request headers.
+- `_http.py` (private, shared by the OpenAI-compatible and Anthropic adapters):
+  `JSONHTTPClient.post_json/apost_json` on `httpx` (ADR 0002: no vendor SDKs). Retries
+  408/429/5xx, timeouts, network and remote-protocol errors; other 4xx fail at once.
+  `RetryPolicy(max_retries=2, initial_delay=0.5, max_delay=8, max_retry_after=60, jitter,
+  sleep, async_sleep)`: delay = server hint (`retry-after-ms`, then `Retry-After` seconds or
+  HTTP date, capped at `max_retry_after`, no jitter) else `jitter(min(max_delay,
+  initial_delay * 2**n))`; default jitter is "equal jitter" (`[d/2, d]`). `jitter`/`sleep` are
+  injectable so tests are instant and deterministic. The sync `httpx.Client` is lazy and reused
+  (pooling, closed by `close()`/context manager); async calls use an injected `AsyncClient` or
+  a short-lived one per call, which keeps the client safe across event loops (repeated
+  `asyncio.run`). Retries are logged at DEBUG on `agentlens.llm`, without headers.
+- `openai_compat.py`: `OpenAICompatClient(model=None, *, base_url="https://api.openai.com/v1",
+  api_key=None, timeout=60, max_retries=2, retry_policy=None, headers=None, provider=None,
+  http_client=None, async_http_client=None)` posts to `{base_url}/chat/completions`, so one
+  adapter covers OpenAI, Ollama (`:11434/v1`), vLLM (`:8000/v1`), LM Studio (`:1234/v1`) and
+  other compatible servers. Key: argument, else `OPENAI_API_KEY`, else no `Authorization`
+  header (local servers); `api_key=""` never sends one. Mapping: `ToolSpec` → `{"type":
+  "function", "function": {...}}`; assistant `tool_calls` arguments JSON-encoded, tool messages
+  keep `tool_call_id`; `temperature`/`max_tokens`/`response_format` only sent when set
+  (`max_tokens`, not `max_completion_tokens`, as that is what compatible servers accept).
+  Response: first choice; tool-call arguments decoded (strings or already-objects, empty →
+  `{}`), missing ids synthesised as `call_<index>`; `usage` → `Usage(prompt_tokens,
+  completion_tokens, cost_usd=None)` (pricing is #12), `None` if not reported; `raw` is the
+  response body only. `provider` (read by `wrap_llm`) defaults to `"openai"` for the official
+  URL and `"openai_compat"` otherwise. The key is kept private and excluded from `repr`.
 
 ## 4. Replay
 - **Cassette**: during recording, each LLM/tool call is stored with

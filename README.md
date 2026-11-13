@@ -60,6 +60,19 @@ values under keys such as `api_key`/`authorization` and strings that look like A
 `redactor=` (any `Callable[[JsonValue], JsonValue]`, e.g. a configured
 `agentlens.PatternRedactor`) or use `agentlens.redact_trace(trace)` standalone.
 
+### Real models
+`OpenAICompatClient` talks to any OpenAI-compatible chat completions API — OpenAI, Ollama,
+vLLM, LM Studio — through `base_url` (retries with backoff on 429/5xx, tools, JSON mode):
+
+```python
+from agentlens.llm import LLMRequest, OpenAICompatClient
+
+llm = OpenAICompatClient(model="gpt-4o-mini")  # API key from OPENAI_API_KEY
+local = OpenAICompatClient(model="llama3.1", base_url="http://localhost:11434/v1")  # Ollama
+request = LLMRequest(messages="Greet me in JSON", response_format={"type": "json_object"})
+print(llm.complete(request).content)  # e.g. {"greeting": "Hello!"}
+```
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/).
