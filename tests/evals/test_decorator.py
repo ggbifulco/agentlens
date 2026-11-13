@@ -112,7 +112,7 @@ def test_bad_params_are_config_errors(registry: EvaluatorRegistry) -> None:
         return True
 
     with pytest.raises(
-        EvaluatorConfigError, match="missing a required keyword-only argument: 'pattern'"
+        EvaluatorConfigError, match=r"missing a required (keyword-only )?argument: 'pattern'"
     ):
         registry.get("needs")
     with pytest.raises(EvaluatorConfigError, match="unexpected keyword"):
