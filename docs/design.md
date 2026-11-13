@@ -321,6 +321,53 @@ Implementation notes (`src/agentlens/llm/`):
 - **Divergence**: first call whose request hash differs is reported with a diff of the request.
 - **Live replay**: re-run case inputs with a different `LLMClient`/config, recording a new trace.
 
+Implementation notes (`src/agentlens/replay/`, #13):
+- `Cassette(entries=(), *, mode="record", record_new=False, metadata=None)` holds
+  `CassetteEntry(index, kind, key, name, request, response)` items. `cassette.wrap_llm(client=None,
+  *, model=, provider=)` returns a `CassetteLLM` (an `LLMClient`, sync + async);
+  `cassette.wrap_tool(fn, name=)` (also as decorator, sync + async) does the same for tools.
+  Wrap **inside** the tracing wrappers — `agentlens.wrap_llm(cassette.wrap_llm(client))`,
+  `agentlens.wrap_tool(cassette.wrap_tool(fn))` — so playback produces the same spans as the
+  live run (tested: a recorded MockLLM + tool run replayed against a failing client and a
+  different tool gives an identical trace, ids/timestamps aside). `cassette.wrap_tool` of an
+  already traced tool unwraps it and re-applies tracing outside the cassette.
+- Key: `(index, key)`. `index` counts calls **per kind** (`llm`, `tool`) through one cassette,
+  so adding/removing a tool call does not shift every later LLM index. LLM key =
+  `LLMRequest.fingerprint()` (same value as the `request_hash` span attribute); tool key =
+  `tool_key(name, arguments)` = sha256 of canonical JSON `{"name", "arguments"}`, arguments
+  bound by parameter name as in `tool_call` spans. Volatile values are not an issue for the
+  keys: ids inside later requests (tool-call ids) come from played-back responses, so they are
+  the recorded ones.
+- Modes (`cassette.mode`, switchable at any time): `record` always calls through and stores
+  (replacing an entry at the same index); `strict` needs entry at index with equal key and tool
+  name; `lenient` takes the entry at index whatever the request; `fallthrough` plays hits and
+  sends misses to the real client/tool, storing them (replacing the mismatching entry or
+  appending) only with `record_new=True`. A miss in `strict`/`lenient` raises
+  `CassetteMissError(kind, index, mode, expected, actual_request, actual_key, actual_name)`
+  with `expected_request` — #14 builds the request diff on these fields. A miss does not
+  consume the index. Pure playback needs no real client; recording or a fallthrough miss
+  without one raises `CassetteError`.
+- Errors of the real client/tool are not recorded and give the index back, so the cassette
+  holds the successful calls in order (a retried call is replayed once). Calls made **inside**
+  a real tool execution (a tool that itself calls the LLM) bypass the cassette (a per-cassette
+  `ContextVar`): playing the tool back skips its body, so recording those calls would shift
+  later indexes. Concurrent calls are thread-safe (one lock) but indexed in arrival order.
+- Played-back tool results are the recorded **JSON** (a tuple comes back as a list, a model as a
+  dict) — enough for agents that feed results back to an LLM; typed decoding can come later.
+- `CassetteLLM.model`/`provider` (read by `wrap_llm` for span names/attributes): explicit
+  argument, else the real client's, else `cassette.metadata` — recording stores the client's
+  values there, so playback without a client keeps span names identical.
+- File format (JSONL, written atomically like `store.jsonl`): line 1 is a header
+  `{"format": "agentlens-cassette", "version": 1, "metadata": {...}}`, then one entry per line
+  in recording order; LLM `request` is the `LLMRequest` JSON without defaults (as span input),
+  `response` the full `LLMResponse` JSON (usage and raw included). Chosen over plain entries
+  without header so the format can be versioned and carry the model/provider defaults; the
+  header is optional on load (hand-written fixtures). `Cassette.load(path, mode="strict")`
+  validates every line (`CassetteFormatError(path:line)`, also for duplicate `(kind, index)`).
+- `Cassette.from_trace(trace)` rebuilds a cassette from `llm_call`/`tool_call` spans in start
+  order (failed, unfinished and tool-nested spans skipped, response `usage` taken from the
+  span; `raw` only if traced with `include_raw=True`), so any traced run can be replayed.
+
 ## 5. Evaluators
 ```python
 class Evaluator(Protocol):

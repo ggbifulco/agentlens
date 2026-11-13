@@ -283,6 +283,8 @@ class Cassette:
         Playback returns the recorded return value **as JSON** (dicts, lists,
         strings, numbers), so tools returning other objects get their JSON form.
 
+        The wrapper's ``__name__`` is the tool name, so wrapping it with
+        :func:`agentlens.wrap_tool` gives the span that name too.
         A function already wrapped by :func:`agentlens.wrap_tool` is unwrapped,
         put behind the cassette and traced again, so its ``tool_call`` span is
         still recorded when the tool is played back.
