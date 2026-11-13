@@ -237,4 +237,4 @@ Append-only log of development sessions (newest at the bottom).
   `Cassette.from_trace` (same selection and keys). `CassetteMode`/`EntryKind` moved to
   `replay/_types.py` (re-exported) to break an import cycle.
 - No new dependencies. 595 tests, 100% coverage; README example verified.
-- Next: #15 (M3 Evaluators).
+- Next: #15 Evaluator protocol, registry and @evaluator decorator (M3).
