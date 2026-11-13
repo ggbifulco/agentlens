@@ -116,6 +116,21 @@ Implementation notes (`src/agentlens/tracing/`):
 - One connection in autocommit mode, explicit `BEGIN IMMEDIATE` per write, shared behind an
   `RLock` (`check_same_thread=False`) so runs in a thread pool can use it as sink.
 
+## 2c. JSONL interchange (`agentlens.store.jsonl`, ADR 0003)
+- Format: one `Trace` JSON document per line (`Trace.model_dump_json()`), UTF-8, `\n` line ends.
+  No header or record-type wrapper: every line is directly a trace, so files work with
+  `grep`/`jq` and diff cleanly. Blank lines are ignored on read.
+- `export_jsonl(store, path, name=, experiment_id=, metadata=, limit=) -> int` takes the
+  `Store.list_traces` filters and writes the selection **oldest first** (`limit` still keeps the
+  most recent N). `import_jsonl(store, path, experiment_id=) -> int` upserts every trace, so
+  re-importing is idempotent; `experiment_id` optionally links them to a stored experiment.
+- Only traces travel: the experiment link and eval results are not part of the file
+  (they can be recomputed; a richer format can be added later if needed).
+- Safety: writes go to a temp sibling + `os.replace` (no half-written file); import validates the
+  whole file first, so a malformed line raises `JSONLFormatError(path:line)` and saves nothing.
+- `write_jsonl(traces, path)` / `read_jsonl(path)` are the store-free building blocks
+  (fixtures, cassettes). Both functions use only the `Store` protocol.
+
 ## 3. LLM adapters
 ```python
 class LLMClient(Protocol):

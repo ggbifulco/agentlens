@@ -74,3 +74,16 @@ Append-only log of development sessions (newest at the bottom).
 - No new dependencies (stdlib `sqlite3`). Tests on `tmp_path` databases + Hypothesis
   round-trip; 136 tests, 100% coverage.
 - Next: #6 JSONL export/import of traces.
+
+## 2026-11-13 — #6 JSONL export/import of traces
+- Added `agentlens.store.jsonl`: `export_jsonl(store, path, name=, experiment_id=, metadata=,
+  limit=)`, `import_jsonl(store, path, experiment_id=)`, plus store-free `write_jsonl` /
+  `read_jsonl` and `JSONLFormatError` (a `StoreError` carrying `path` and 1-based `line`).
+- Format: one `Trace` JSON document per line, oldest first; blank lines ignored. Only traces are
+  exported (no experiment link / eval results) — documented in `docs/design.md` §2c.
+- Atomic write (temp file + `os.replace`); import validates the whole file before saving
+  (all-or-nothing on format errors) and is idempotent thanks to upserts.
+- Works against the `Store` protocol, not `SQLiteStore`. No new dependencies.
+- Tests: round-trip across two SQLite stores preserving every field, filters, ordering,
+  atomicity, error reporting, Hypothesis write/read round-trip. 152 tests, 100% coverage.
+- Next: #7 Redaction hook for secrets in traces.
