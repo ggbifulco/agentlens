@@ -1,10 +1,11 @@
-"""Benchmark: recording overhead must stay below 5 ms per span (FR-T5)."""
+"""Benchmarks: recording overhead must stay below 5 ms per span (FR-T5)."""
 
 from __future__ import annotations
 
 import time
 
 import agentlens
+from agentlens.llm import LLMRequest, MockLLM
 
 N = 2_000
 BUDGET_MS = 5.0
@@ -36,4 +37,27 @@ def test_overhead_per_span_below_budget() -> None:
     assert len(t.spans) == N
     per_span_ms = (traced - baseline) / N * 1000
     print(f"tracing overhead: {per_span_ms * 1000:.1f} us/span")
+    assert per_span_ms < BUDGET_MS
+
+
+def test_wrap_llm_overhead_per_span_below_budget() -> None:
+    request = LLMRequest(messages="Where is order 1234? " * 10)
+    mock = MockLLM(["It shipped."], cycle=True)
+    llm = agentlens.wrap_llm(mock)
+    n = 500
+
+    start = time.perf_counter()
+    for _ in range(n):
+        mock.complete(request)
+    baseline = time.perf_counter() - start
+
+    with agentlens.run("bench") as t:
+        start = time.perf_counter()
+        for _ in range(n):
+            llm.complete(request)
+        traced = time.perf_counter() - start
+
+    assert len(t.spans) == n
+    per_span_ms = (traced - baseline) / n * 1000
+    print(f"wrap_llm overhead: {per_span_ms * 1000:.1f} us/span")
     assert per_span_ms < BUDGET_MS
