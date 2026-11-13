@@ -80,8 +80,8 @@ Implementation notes (`src/agentlens/schema/`):
 
 Implementation notes (`src/agentlens/tracing/`):
 - `run(name, input=, metadata=, sink=)` yields the live `Trace`; on exit it sets `end_time`
-  (and `error` if the block raised, then re-raises) and calls `sink(trace)` once. Until the
-  `Store` exists (#5) a sink is any `Callable[[Trace], None]` (e.g. `store.save_trace`).
+  (and `error` if the block raised, then re-raises) and calls `sink(trace)` once. A sink is any
+  `Callable[[Trace], None]`; `store.save_trace` is the usual one.
 - Two `ContextVar`s hold the current `Recorder` and the innermost open `Span`. A span's parent
   is the current span when it starts; `run` resets the current span so nested runs are
   independent traces. Plain `threading.Thread`s do not inherit the context (no recording);
@@ -93,6 +93,28 @@ Implementation notes (`src/agentlens/tracing/`):
 - Every recorder operation runs behind a guard that logs to the `agentlens.tracing` logger;
   user exceptions (including `CancelledError`) are recorded as `"Type: message"` and re-raised.
 - Measured overhead ≈ 40 µs/span (budget 5 ms, checked by `tests/tracing/test_overhead.py`).
+
+## 2b. Store (`agentlens.store`, ADR 0003)
+- `Store` protocol (`runtime_checkable`): `save_trace(trace, experiment_id=)`, `get_trace`,
+  `list_traces(name=, experiment_id=, metadata=, limit=)`, `save_experiment`, `get_experiment`,
+  `list_experiments(name=, suite=, is_baseline=)`, `save_eval_results(trace_id, results)`,
+  `get_eval_results(trace_id)`, `list_eval_results(experiment_id) -> {trace_id: [EvalResult]}`.
+  `get_*` return `None` when missing; lists are most recent first.
+- Saves are upserts. Re-saving a trace without `experiment_id` keeps its existing link.
+  `save_eval_results` *replaces* a trace's results (re-evaluation is idempotent) and keeps their
+  order; the same evaluator may appear twice (e.g. two `contains` checks).
+- `SQLiteStore(path=".agentlens/agentlens.db")`: each object is one JSON document (`data`)
+  plus copied columns used to filter/sort (`name`, `experiment_id`, `start_time`, ...).
+  Timestamps are fixed-width UTC ISO strings so text order = time order.
+- Metadata filter = equality on JSON scalars via `json_each`, comparing the JSON type too
+  (`True` ≠ `1`, `None` ≠ missing key; `3` = `3.0`).
+- Relations: trace → experiment and eval result → trace are foreign keys (`ON DELETE CASCADE`);
+  a dangling reference raises `StoreError` and the write is rolled back.
+- Migrations: append-only tuple `MIGRATIONS` in code; version in `PRAGMA user_version`; each
+  migration + version bump in one transaction. A database newer than the code raises
+  `SchemaVersionError`.
+- One connection in autocommit mode, explicit `BEGIN IMMEDIATE` per write, shared behind an
+  `RLock` (`check_same_thread=False`) so runs in a thread pool can use it as sink.
 
 ## 3. LLM adapters
 ```python
