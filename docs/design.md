@@ -501,6 +501,46 @@ Implementation notes (`src/agentlens/evals/builtin/`, #16, FR-E1 part 1):
   they do not count). `{no_error: {include_spans: false}}` checks only the run. Details list
   the first 10 failed spans in start order.
 
+Implementation notes (`src/agentlens/evals/builtin/trace_checks.py`, #17, FR-E1 part 2):
+- Trajectory checks read only the trace's derived metrics, so they work on live, stored and
+  replayed traces alike. Classes/primaries: `ToolSequence` (`tool_sequence` → `tools`),
+  `MaxSteps` (`max_steps` → `value`), `CostBudget` (`cost_budget` → `max_usd`),
+  `LatencyBudget` (`latency_budget` → `max_ms`). Limits must be finite numbers `>= 0`
+  (`max_steps` an integer; bools/strings/NaN/inf are `EvaluatorConfigError` at build).
+- `tool_sequence(tools=None, mode="ordered", allow_extra=True, forbidden=None)` compares
+  `trace.tool_calls` (tool span names, start order) with `tools`, else `case.expected["tools"]`
+  (§6), else `evaluate` raises `EvaluatorConfigError`. **Default mode `ordered`** — the usual
+  intent ("look up, then refund") without failing on an extra search. **Repeats count in every
+  mode (multiset semantics)**: `[search, search]` needs two `search` calls. Scores (LCS =
+  longest common subsequence, an `O(n·m)` DP; ties keep the earlier expected tools, so the
+  later ones are reported missing):
+  - `strict`: pass iff `actual == expected`; score `LCS / max(len(expected), len(actual))`, so
+    missing, extra and reordered calls all lower it and only an exact match scores 1.
+  - `ordered`: pass iff expected is a subsequence of actual; score `LCS / len(expected)`.
+  - `subset`: pass iff the expected multiset is included in the calls (any order); score
+    `matched / len(expected)`.
+  - An empty expected list passes `ordered`/`subset`; in `strict` it means "no tool calls".
+  - `allow_extra=False` (`ordered`/`subset`): calls to tools *not in* the expected list fail the
+    check and are added to the denominator; retries of expected tools are not extras (use
+    `strict` for "exactly these calls"). `forbidden`: any call to one of these tools fails with
+    score 0 (a safety-style constraint, not partial credit).
+  - Reason: verdict + `(mode): expected [...], actual [...]` (lists capped at 20 names); details
+    `expected`, `actual`, `missing`, `unexpected`, `forbidden_called`, `mode`, `source`.
+- **Budget scoring** (shared): pass iff `actual <= limit`; score 1 within, else `limit / actual`
+  (10 % over → ≈0.91), so reports can rank how far over a run went while the gate still fails.
+- `max_steps(value)`: `trace.n_steps` (`agent_step` spans if any, else LLM calls); details say
+  which were counted.
+- `cost_budget(max_usd, on_unknown="fail")`: `trace.total_cost`. **Unknown cost** (no span with
+  a cost) and **partial cost** (some spans with `usage` but `cost_usd=None`) cannot be verified:
+  if the known part already exceeds the budget it fails regardless (a lower bound); otherwise
+  `on_unknown` decides — default `"fail"` (a budget you cannot check is not met, and an unpriced
+  model should be noticed; `MockLLM` reports cost 0 so offline suites are unaffected), `"pass"`
+  scores 1 with a reason saying the cost was not verified. Details: `cost_usd`, `max_usd`,
+  `unpriced_spans`, `on_unknown`.
+- `latency_budget(max_ms)`: `trace.latency_ms`; a trace that has not ended (`None`) fails with
+  score 0.
+- Helpers `check_choice`, `check_number`, `params_repr` moved to `builtin/_common.py`.
+
 ## 6. Suites (YAML)
 ```yaml
 name: support-agent
