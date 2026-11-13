@@ -140,3 +140,21 @@ Append-only log of development sessions (newest at the bottom).
   ≈ 65 µs per `llm_call` span. `request_hash` + span order prepare cassettes (#13).
 - No new dependencies. 276 tests, 100% coverage.
 - Next: #10 OpenAI-compatible adapter (OpenAI, Ollama, vLLM, LM Studio).
+
+## 2026-11-13 — #10 OpenAI-compatible adapter (OpenAI, Ollama, vLLM, LM Studio)
+- Added `agentlens.llm.OpenAICompatClient(model=None, *, base_url=, api_key=, timeout=,
+  max_retries=, retry_policy=, headers=, provider=, http_client=, async_http_client=)`:
+  `complete`/`acomplete` on `{base_url}/chat/completions`; tools (`ToolSpec` → function tools,
+  `tool_calls` decoded into `ToolCall` dict arguments, tool messages keep `tool_call_id`),
+  `response_format` passthrough (JSON mode / JSON schema), `usage` → `schema.Usage`
+  (`cost_usd=None` until pricing #12), `raw` = response body. Key from argument or
+  `OPENAI_API_KEY`, none for local servers; never logged, in `repr`, `raw` or errors.
+- Error hierarchy in `agentlens.llm.errors`: `LLMError` > `LLMHTTPError(status_code, body)` >
+  `LLMRateLimitError`; `LLMConnectionError` > `LLMTimeoutError`; `LLMResponseError`.
+- Shared private `agentlens.llm._http.JSONHTTPClient` (for #11 too) + public `RetryPolicy`:
+  retries 408/429/5xx and transport errors, exponential backoff capped at `max_delay`,
+  `Retry-After`/`retry-after-ms` honoured (capped), injectable `jitter`/`sleep`/`async_sleep`.
+- New deps: `httpx` (runtime, both adapters, no vendor SDK per ADR 0002), `respx` (dev, mocked
+  HTTP). Optional live test: `AGENTLENS_LIVE_TESTS=1 AGENTLENS_LIVE_OPENAI_MODEL=...`
+  (+ `OPENAI_API_KEY` or `AGENTLENS_LIVE_OPENAI_BASE_URL`). 381 tests, 100% coverage.
+- Next: #11 Anthropic adapter (reuse `agentlens.llm._http`).
