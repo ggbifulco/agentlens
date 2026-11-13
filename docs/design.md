@@ -410,6 +410,47 @@ Built-ins: `exact_match`, `contains`, `regex`, `json_schema`, `tool_sequence(mod
 Judges use `LLMClient`, temperature 0, prompt templates in `evals/prompts/`, cache keyed by
 `sha256(judge_model + prompt + trace output)`.
 
+Implementation notes (`src/agentlens/evals/`, #15, FR-E3):
+- `Evaluator` is a `runtime_checkable` Protocol whose `name` is a read-only property (so a
+  plain attribute, a dataclass field or a `@property` all satisfy it). `AsyncEvaluator` adds
+  `aevaluate(trace, case) -> Awaitable[EvalResult]` for judges (#18). `run_evaluator` /
+  `arun_evaluator` are the only way the runner should call evaluators: they **never raise** —
+  any `Exception` (or a non-`EvalResult` return) becomes `error_result(name, exc)`: score 0,
+  `passed=False`, `reason="evaluator error: <Type>: <msg>"`, `details["error"]={type, message}`
+  so reports can tell a crash from a genuine failure. `KeyboardInterrupt`/`SystemExit` propagate.
+  `arun_evaluator` awaits `aevaluate` when present, else runs `evaluate` via `asyncio.to_thread`.
+- Registry (`EvaluatorRegistry`, process-wide `default_registry`; module functions `register`,
+  `unregister`, `get_evaluator`, `available_evaluators`): name → factory, `factory(**params) ->
+  Evaluator` (an evaluator class is a factory). `get_evaluator(spec, **overrides)` accepts an
+  `EvaluatorSpec` or its YAML spellings. **Scalar shorthand rule**: params exactly `{"value": x}`
+  go to the factory's *primary* parameter — `register(..., primary=...)`, else the first
+  keyword-passable parameter of its signature; a factory that declares `value` or only `**kwargs`
+  gets `value=x` unchanged. Params are checked with `inspect.Signature.bind` before calling, so a
+  typo is an `EvaluatorConfigError` naming the signature; `TypeError`/`ValueError` from the factory
+  and non-evaluator returns are config errors too. Config errors (`UnknownEvaluatorError` with
+  difflib suggestions, `EvaluatorConfigError`, `DuplicateEvaluatorError`, all `EvaluatorError`)
+  are raised eagerly — a broken suite fails at load, not mid-run.
+- Duplicates raise unless `replace=True`, except when the new factory has the same origin
+  (`module.qualname`) as the registered one: re-running a notebook cell or reloading a module
+  just replaces it.
+- `@evaluator` (bare or `@evaluator(name=, threshold=0.5, register=True, replace=, registry=)`)
+  returns a `FunctionEvaluator`: still callable as the original function, `evaluate` normalises
+  the return value with `to_eval_result` (`EvalResult` as is; `bool` → 1/0; number in `[0, 1]` →
+  `passed = score >= threshold`; `(value, reason)`; mapping with `score`/`passed`) and catches
+  exceptions itself, so it is safe to call directly too. The function must take `(trace, case)`
+  positionally; later parameters become keyword params of the registered factory
+  (`FunctionEvaluator.bind`). `threshold` is always accepted as a spec param (pass threshold) and
+  forwarded to the function only if it declares it; for a function without extra params it is
+  the primary, so `{my_eval: 0.8}` sets the threshold. `async def` evaluators work: `aevaluate`
+  awaits them, `evaluate` runs them with `asyncio.run` (in a worker thread if a loop is running).
+- `evaluate_case(trace, case, evaluators=None, *, registry=None)` (default `case.evaluators`,
+  objects and specs mixed) resolves everything first, then runs each in order;
+  `aevaluate_case` runs them concurrently with `asyncio.gather`, keeping order. Merging suite
+  defaults with case evaluators is the runner's job (#20).
+- Built-ins (#16-#18) will register themselves at import of `agentlens.evals` (imported from its
+  `__init__`), so `available_evaluators()` lists them without extra setup. Top-level re-exports:
+  `agentlens.evaluator`, `agentlens.Evaluator`.
+
 ## 6. Suites (YAML)
 ```yaml
 name: support-agent
