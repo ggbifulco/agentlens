@@ -30,6 +30,7 @@ from typing import Any, ParamSpec, TypeVar, cast, overload
 from agentlens.schema import Span, SpanKind, Trace
 from agentlens.tracing._serialize import bind_arguments
 from agentlens.tracing.recorder import Recorder, TraceSink
+from agentlens.tracing.redaction import DEFAULT_REDACTOR, Redactor
 
 __all__ = ["current_span", "current_trace", "run", "span", "trace"]
 
@@ -63,6 +64,7 @@ def run(
     input: object = None,
     metadata: Mapping[str, object] | None = None,
     sink: TraceSink | None = None,
+    redactor: Redactor | None = DEFAULT_REDACTOR,
 ) -> Iterator[Trace]:
     """Record one agent run as a :class:`~agentlens.schema.Trace`.
 
@@ -74,8 +76,9 @@ def run(
 
     Spans created inside the block (by :func:`trace`, :func:`span` or the LLM
     wrappers) are attached to the yielded trace. When the block exits the trace
-    gets its ``end_time`` (and ``error`` if the block raised) and is passed to
-    ``sink``. Exceptions from the block are re-raised after recording.
+    gets its ``end_time`` (and ``error`` if the block raised) and a redacted
+    copy is passed to ``sink``; the yielded trace itself is not redacted.
+    Exceptions from the block are re-raised after recording.
 
     Runs may be nested; an inner run records an independent trace.
 
@@ -85,9 +88,15 @@ def run(
         metadata: Run context such as git sha, case id or repetition.
         sink: Called once with the finished trace (e.g. ``store.save_trace``).
             Errors raised by the sink are logged, not propagated.
+        redactor: Masks secrets in the copy given to ``sink`` (NFR-5); defaults
+            to :data:`~agentlens.tracing.DEFAULT_REDACTOR`. ``None`` disables
+            redaction. If it raises, the error is logged and the trace is not
+            passed to the sink.
     """
     try:
-        recorder: Recorder | None = Recorder(name, input=input, metadata=metadata, sink=sink)
+        recorder: Recorder | None = Recorder(
+            name, input=input, metadata=metadata, sink=sink, redactor=redactor
+        )
     except Exception:
         logger.exception("could not start run %r; it will not be recorded", name)
         recorder = None

@@ -87,3 +87,21 @@ Append-only log of development sessions (newest at the bottom).
 - Tests: round-trip across two SQLite stores preserving every field, filters, ordering,
   atomicity, error reporting, Hypothesis write/read round-trip. 152 tests, 100% coverage.
 - Next: #7 Redaction hook for secrets in traces.
+
+## 2026-11-13 — #7 Redaction hook for secrets in traces
+- Added `agentlens.tracing.redaction`: `Redactor` (= `Callable[[JsonValue], JsonValue]`),
+  `PatternRedactor(patterns=, keys=, replacement=)`, `DEFAULT_REDACTOR`, `DEFAULT_PATTERNS`,
+  `DEFAULT_SENSITIVE_KEYS`, `REDACTED` and `redact_trace(trace, redactor=None)`.
+  `PatternRedactor`, `Redactor` and `redact_trace` are also re-exported from `agentlens`.
+- `run(..., redactor=DEFAULT_REDACTOR)`: `Recorder.finish` hands the sink a redacted *copy*
+  (trace input/output/metadata/error, span input/output/attributes/error); the live trace is
+  untouched. `redactor=None` disables redaction.
+- Default masks sensitive dict keys (`api_key`, `authorization`, `password`, `token`, ...,
+  `*_api_key`/`*_secret`/`*_password`) and string patterns: `sk-` (OpenAI, Anthropic `sk-ant-`),
+  `Bearer`, AWS `AKIA`/`ASIA`, GitHub `ghp_`/`github_pat_`, Google `AIza`, Slack, JWT, PEM
+  private keys, `api_key=...` assignments.
+- Fail closed + FR-T5: a failing redactor is logged and the trace is not persisted; user code
+  never sees the error. Redaction runs once per trace, so per-span overhead is unchanged.
+- No new dependencies (stdlib `re`). Tests with nested payloads incl. an end-to-end SQLite check;
+  186 tests, 100% coverage.
+- Next: #8 LLMClient protocol, request/response models and MockLLM.
