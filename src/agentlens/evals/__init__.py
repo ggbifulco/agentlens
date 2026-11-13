@@ -1,4 +1,4 @@
-"""Evaluators: score traces with deterministic checks or LLM judges (``docs/design.md`` §5).
+r"""Evaluators: score traces with deterministic checks or LLM judges (``docs/design.md`` §5).
 
 An evaluator is anything with a ``name`` and ``evaluate(trace, case) -> EvalResult``
 (:class:`Evaluator`). The quickest way to write one is the decorator::
@@ -17,8 +17,12 @@ spellings of :class:`~agentlens.schema.EvaluatorSpec`::
     check = get_evaluator("mentions_order")
     results = evaluate_case(trace, case, ["mentions_order"])
 
-Built-in evaluators register themselves in :data:`default_registry` when this
-package is imported (their modules are imported below as they are added).
+Built-in evaluators (:mod:`agentlens.evals.builtin`: ``exact_match``,
+``contains``, ``regex``, ``json_schema``, ``no_error``) register themselves in
+:data:`default_registry` when this package is imported::
+
+    results = evaluate_case(trace, case, ["no_error", {"contains": "refund"},
+                                          {"regex": {"pattern": r"order \d+"}}])
 An evaluator that raises never crashes a run: :func:`run_evaluator` and
 ``@evaluator`` turn the exception into a failed :class:`~agentlens.schema.EvalResult`.
 Configuration errors (unknown name, bad parameters) are raised eagerly.
@@ -30,6 +34,20 @@ from agentlens.evals.base import (
     Evaluator,
     error_result,
     to_eval_result,
+)
+from agentlens.evals.builtin import (
+    UNSET,
+    Contains,
+    ExactMatch,
+    JsonSchema,
+    NoError,
+    OutputPath,
+    OutputPathError,
+    Regex,
+    output_text,
+    output_value,
+    register_builtins,
+    to_text,
 )
 from agentlens.evals.decorator import FunctionEvaluator, evaluator
 from agentlens.evals.errors import (
@@ -59,14 +77,22 @@ from agentlens.evals.run import (
 
 __all__ = [
     "DEFAULT_THRESHOLD",
+    "UNSET",
     "AsyncEvaluator",
+    "Contains",
     "DuplicateEvaluatorError",
     "Evaluator",
     "EvaluatorConfigError",
     "EvaluatorError",
     "EvaluatorFactory",
     "EvaluatorRegistry",
+    "ExactMatch",
     "FunctionEvaluator",
+    "JsonSchema",
+    "NoError",
+    "OutputPath",
+    "OutputPathError",
+    "Regex",
     "RegisteredEvaluator",
     "SpecLike",
     "UnknownEvaluatorError",
@@ -78,9 +104,13 @@ __all__ = [
     "evaluate_case",
     "evaluator",
     "get_evaluator",
+    "output_text",
+    "output_value",
     "register",
+    "register_builtins",
     "resolve_evaluators",
     "run_evaluator",
     "to_eval_result",
+    "to_text",
     "unregister",
 ]
