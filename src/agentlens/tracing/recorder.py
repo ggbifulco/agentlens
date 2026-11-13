@@ -21,6 +21,7 @@ from pydantic import JsonValue
 from agentlens.schema import Span, SpanKind, Trace
 from agentlens.schema._base import utc_now
 from agentlens.tracing._serialize import format_exception, to_json_value
+from agentlens.tracing.redaction import DEFAULT_REDACTOR, Redactor, redact_trace
 
 __all__ = ["Recorder", "TraceSink"]
 
@@ -44,6 +45,7 @@ class Recorder:
         input: object = None,
         metadata: Mapping[str, object] | None = None,
         sink: TraceSink | None = None,
+        redactor: Redactor | None = DEFAULT_REDACTOR,
     ) -> None:
         self.trace = Trace(
             name=name,
@@ -51,6 +53,7 @@ class Recorder:
             metadata=_json_mapping(metadata),
         )
         self._sink = sink
+        self._redactor = redactor
         self._lock = threading.Lock()
         self._finished = False
 
@@ -99,7 +102,13 @@ class Recorder:
         span.end_time = max(utc_now(), span.start_time)
 
     def finish(self, *, error: BaseException | None = None) -> Trace:
-        """End the run and hand the trace to the sink. Idempotent."""
+        """End the run and hand the trace to the sink. Idempotent.
+
+        The sink receives a redacted copy (see :func:`redact_trace`); the
+        returned live trace is left untouched. If redaction fails the trace is
+        *not* passed to the sink: dropping a trace is better than persisting a
+        secret (NFR-5).
+        """
         with self._lock:
             if self._finished:
                 return self.trace
@@ -109,7 +118,18 @@ class Recorder:
         self.trace.end_time = max(utc_now(), self.trace.start_time)
         if self._sink is not None:
             try:
-                self._sink(self.trace)
+                persisted = (
+                    redact_trace(self.trace, self._redactor)
+                    if self._redactor is not None
+                    else self.trace
+                )
+            except Exception:
+                logger.exception(
+                    "redaction failed for run %r; the trace was not persisted", self.trace.name
+                )
+                return self.trace
+            try:
+                self._sink(persisted)
             except Exception:
                 logger.exception("trace sink failed for run %r", self.trace.name)
         return self.trace

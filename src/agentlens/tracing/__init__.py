@@ -13,5 +13,29 @@ Typical use::
 
 from agentlens.tracing.api import current_span, current_trace, run, span, trace
 from agentlens.tracing.recorder import Recorder, TraceSink
+from agentlens.tracing.redaction import (
+    DEFAULT_PATTERNS,
+    DEFAULT_REDACTOR,
+    DEFAULT_SENSITIVE_KEYS,
+    REDACTED,
+    PatternRedactor,
+    Redactor,
+    redact_trace,
+)
 
-__all__ = ["Recorder", "TraceSink", "current_span", "current_trace", "run", "span", "trace"]
+__all__ = [
+    "DEFAULT_PATTERNS",
+    "DEFAULT_REDACTOR",
+    "DEFAULT_SENSITIVE_KEYS",
+    "REDACTED",
+    "PatternRedactor",
+    "Recorder",
+    "Redactor",
+    "TraceSink",
+    "current_span",
+    "current_trace",
+    "redact_trace",
+    "run",
+    "span",
+    "trace",
+]
