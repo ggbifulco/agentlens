@@ -368,6 +368,37 @@ Implementation notes (`src/agentlens/replay/`, #13):
   order (failed, unfinished and tool-nested spans skipped, response `usage` taken from the
   span; `raw` only if traced with `include_raw=True`), so any traced run can be replayed.
 
+Implementation notes (divergence, #14, FR-R3):
+- `ReplayDivergence` (pydantic, `agentlens.replay.divergence`): `kind`, `index`, `reason`
+  (`request_changed` | `tool_changed` | `extra_call` | `missing_call`), `mode` (`None` for trace
+  comparisons), expected/actual `name`, `key` and `request`, `diff`, `diff_truncated`, `span_id`;
+  `create(...)` derives reason and diff, `summary()` gives one line, `to_dict(include_requests=)`
+  JSON for reports, `str()` = summary + diff. Chosen as a schema model (not a dataclass) so it
+  validates and round-trips like the rest of the data model.
+- Diff = `difflib.unified_diff` over pretty-printed canonical JSON (`sort_keys`, indent 2,
+  unicode kept) labelled `recorded/replayed <kind> call #<i>`; tool calls diff
+  `{"name", "arguments"}` so a renamed tool shows up. Bounded for errors/traces/reports:
+  `DIFF_MAX_LINES=200` lines (then `... (N more diff lines)`) of `DIFF_MAX_LINE_CHARS=500`
+  chars each (`request_diff(...)` exposes both limits). A side without a call diffs as empty.
+- Detection is in `Cassette._begin`: any playback call whose recorded entry is missing or has a
+  different key/tool name is a divergence, in every playback mode. `strict` (and `lenient` past
+  the end) raise `CassetteMissError`, whose message now ends with the diff and whose
+  `.divergence` holds it; `lenient`/`fallthrough` continue. All are kept in
+  `cassette.divergences` / `cassette.first_divergence` (cleared by `rewind()`). `record` never
+  diverges. The diff is built outside the cassette lock.
+- Reports (#26-#28) are not built yet, so divergences are put on the trace: the current span, when
+  it is the matching `llm_call`/`tool_call` (cassette wrapped inside the tracing wrappers), gets
+  attributes `replay_diverged=True` and `replay_divergence=<summary>` (also on the failed span in
+  strict mode); the trace metadata `replay_divergence` holds the **first** divergence's
+  `to_dict(include_requests=False)` (the replayed request is already the span input; `span_id`
+  links them). Plain snake_case keys like the other span attributes. Marking never raises.
+- `find_divergence(recorded, replayed, *, kind="llm")` compares two traces: both are turned
+  into cassette entries with `Cassette.from_trace` (same span selection and keys), then compared
+  index by index; first mismatch, or `None`. Works for live replays against another model (FR-R2).
+  "Missing calls" (the replay stopped early) are only visible this way or via `cassette.unplayed`.
+- `CassetteMode`/`EntryKind` moved to `replay/_types.py` (re-exported unchanged) to avoid an
+  import cycle between `cassette`, `errors` and `divergence`.
+
 ## 5. Evaluators
 ```python
 class Evaluator(Protocol):

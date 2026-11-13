@@ -137,6 +137,27 @@ when the request at an index changed, `lenient` matches by index only, and `fall
 sends misses to the real client (`record_new=True` also stores them).
 `Cassette.from_trace(trace)` builds a cassette from an already recorded trace.
 
+When a replay departs from the recording you get the first divergence: call index and a
+unified diff of the recorded vs actual request (`ReplayDivergence`). `strict` puts it in the
+`CassetteMissError` message (and `exc.divergence`); `lenient`/`fallthrough` keep going and
+collect them in `cassette.divergences`; inside a run the diverging span gets
+`replay_diverged=True` and the trace metadata `replay_divergence`:
+
+```python
+def agent_v2(llm, lookup) -> str:  # the prompt changed
+    order = lookup("1234")
+    return llm.complete(LLMRequest(messages=f"Summarise briefly: {order}")).content or ""
+
+replay = Cassette.load("cassettes/support.jsonl", mode="lenient")  # plays recorded answers
+with agentlens.run("support-v2") as trace:
+    agent_v2(agentlens.wrap_llm(replay.wrap_llm()),
+             agentlens.wrap_tool(replay.wrap_tool(lookup_order)))
+print(replay.first_divergence)  # llm call #0: request differs from the recording [lenient] + diff
+print(trace.metadata["replay_divergence"]["index"])  # 0
+```
+
+`find_divergence(recorded_trace, replayed_trace, kind="llm")` compares two traces the same way.
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/).
