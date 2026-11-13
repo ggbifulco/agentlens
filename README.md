@@ -22,7 +22,7 @@ AgentLens turns agent runs into a **statistically sound regression suite** that 
 
 ## Quick look: recording a trace
 Tracing works today (`agentlens.run`, `@agentlens.trace`, `agentlens.wrap_llm`,
-`agentlens.wrap_tool`); storage is in place, replay and evaluation are next.
+`agentlens.wrap_tool`); storage and cassette replay are in place, evaluation is next.
 
 ```python
 import agentlens
@@ -103,6 +103,39 @@ Providers: `openai`, `anthropic`, `ollama` (`OLLAMA_BASE_URL`, default
 and `mock`. Responses get `usage.cost_usd` from a packaged table of approximate prices
 (`agentlens/llm/pricing.yaml`; local models cost 0, unknown models stay `None`); merge your
 own prices with `AGENTLENS_PRICING=my-pricing.yaml` or `get_client(..., pricing=...)`.
+
+## Replay with cassettes
+Record the LLM and tool calls of a run once, then play them back offline and
+deterministically (ADR 0004). Wrap *inside* the tracing wrappers so playback is traced
+exactly like the live run:
+
+```python
+import agentlens
+from agentlens.llm import LLMRequest, MockLLM
+from agentlens.replay import Cassette
+
+def lookup_order(order_id: str) -> dict[str, str]:
+    return {"id": order_id, "status": "shipped"}
+
+def agent(llm, lookup) -> str:
+    order = lookup("1234")
+    return llm.complete(LLMRequest(messages=f"Summarise {order}")).content or ""
+
+cassette = Cassette()  # mode="record": calls go to the real client/tool and are stored
+llm = agentlens.wrap_llm(cassette.wrap_llm(MockLLM(["Order 1234 has shipped."])))
+print(agent(llm, agentlens.wrap_tool(cassette.wrap_tool(lookup_order))))
+cassette.save("cassettes/support.jsonl")  # header line + one call per line
+
+replay = Cassette.load("cassettes/support.jsonl", mode="strict")  # no real client needed
+llm = agentlens.wrap_llm(replay.wrap_llm())
+print(agent(llm, agentlens.wrap_tool(replay.wrap_tool(lookup_order))))  # same answer
+```
+
+Calls are keyed by `(index, sha256 of the normalised request)`, counted separately for LLM
+and tool calls. `strict` raises `CassetteMissError` (with the recorded and actual request)
+when the request at an index changed, `lenient` matches by index only, and `fallthrough`
+sends misses to the real client (`record_new=True` also stores them).
+`Cassette.from_trace(trace)` builds a cassette from an already recorded trace.
 
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
