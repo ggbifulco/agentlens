@@ -9,7 +9,11 @@ each class as its factory; the *primary* parameter (what a scalar shorthand
 * ``contains`` (:class:`Contains`) — ``text``, a substring or list of substrings;
 * ``regex`` (:class:`Regex`) — ``pattern``;
 * ``json_schema`` (:class:`JsonSchema`) — ``schema``;
-* ``no_error`` (:class:`NoError`) — ``include_spans``.
+* ``no_error`` (:class:`NoError`) — ``include_spans``;
+* ``tool_sequence`` (:class:`ToolSequence`) — ``tools``, the expected tool names;
+* ``max_steps`` (:class:`MaxSteps`) — ``value``, the step limit;
+* ``cost_budget`` (:class:`CostBudget`) — ``max_usd``;
+* ``latency_budget`` (:class:`LatencyBudget`) — ``max_ms``.
 """
 
 from __future__ import annotations
@@ -22,19 +26,29 @@ from agentlens.evals.builtin._common import (
     to_text,
 )
 from agentlens.evals.builtin.output import UNSET, Contains, ExactMatch, JsonSchema, Regex
-from agentlens.evals.builtin.trace_checks import NoError
+from agentlens.evals.builtin.trace_checks import (
+    CostBudget,
+    LatencyBudget,
+    MaxSteps,
+    NoError,
+    ToolSequence,
+)
 from agentlens.evals.registry import EvaluatorFactory, EvaluatorRegistry, default_registry
 
 __all__ = [
     "BUILTIN_EVALUATORS",
     "UNSET",
     "Contains",
+    "CostBudget",
     "ExactMatch",
     "JsonSchema",
+    "LatencyBudget",
+    "MaxSteps",
     "NoError",
     "OutputPath",
     "OutputPathError",
     "Regex",
+    "ToolSequence",
     "output_text",
     "output_value",
     "register_builtins",
@@ -47,6 +61,10 @@ BUILTIN_EVALUATORS: dict[str, tuple[EvaluatorFactory, str]] = {
     "regex": (Regex, "pattern"),
     "json_schema": (JsonSchema, "schema"),
     "no_error": (NoError, "include_spans"),
+    "tool_sequence": (ToolSequence, "tools"),
+    "max_steps": (MaxSteps, "value"),
+    "cost_budget": (CostBudget, "max_usd"),
+    "latency_budget": (LatencyBudget, "max_ms"),
 }
 """Name -> (factory, primary parameter) of every built-in evaluator."""
 
