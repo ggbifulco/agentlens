@@ -16,6 +16,8 @@ from agentlens.tracing import (
     run,
     span,
     trace,
+    wrap_llm,
+    wrap_tool,
 )
 
 __all__ = [
@@ -30,4 +32,6 @@ __all__ = [
     "run",
     "span",
     "trace",
+    "wrap_llm",
+    "wrap_tool",
 ]

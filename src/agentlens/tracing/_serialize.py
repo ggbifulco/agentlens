@@ -34,15 +34,17 @@ def to_json_value(value: object) -> JsonValue:
 
 
 def bind_arguments(
-    signature: inspect.Signature, args: tuple[Any, ...], kwargs: Mapping[str, Any]
+    signature: inspect.Signature | None, args: tuple[Any, ...], kwargs: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Map a call's positional and keyword arguments to parameter names.
 
     ``self``/``cls`` are dropped: the bound object is rarely useful as a span
     input and is often large or unserialisable. If the call does not match the
-    signature (the function is about to raise ``TypeError`` itself), the raw
-    ``args``/``kwargs`` are returned instead.
+    signature (the function is about to raise ``TypeError`` itself), or there
+    is no signature (``None``), the raw ``args``/``kwargs`` are returned instead.
     """
+    if signature is None:
+        return {"args": list(args), "kwargs": dict(kwargs)}
     try:
         bound = signature.bind(*args, **kwargs)
     except TypeError:

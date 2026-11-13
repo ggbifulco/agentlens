@@ -123,3 +123,20 @@ Append-only log of development sessions (newest at the bottom).
 - No new dependencies (async tested with `asyncio.run`, no pytest-asyncio). 243 tests,
   100% coverage.
 - Next: #9 wrap_llm and wrap_tool auto-tracing.
+
+## 2026-11-13 — #9 wrap_llm and wrap_tool auto-tracing
+- Added `agentlens.tracing.wrappers`, re-exported as `agentlens.wrap_llm` / `agentlens.wrap_tool`
+  (plus `TracedLLM`, `TOOL_NAME_ATTR` in `agentlens.tracing`).
+- `wrap_llm(client, name=, provider=, include_raw=False) -> TracedLLM` (an `LLMClient`):
+  `complete`/`acomplete` record `llm_call` spans — input = request JSON (defaults omitted),
+  output = response JSON without `usage` (on `span.usage`) and `raw` (opt-in), attributes
+  `client`, `provider`, `model`, `temperature`, `max_tokens`, `n_messages`, `n_tools`,
+  `tool_names`, `response_format`, `request_hash`, `response_model`, `n_tool_calls`.
+  Unknown attributes delegate to the wrapped client; re-wrapping is idempotent.
+- `wrap_tool(fn, name=)` / `@wrap_tool` / `@wrap_tool(name=...)`: `tool_call` spans named after
+  the tool, sync and async, any callable; never nests two spans when re-wrapped.
+- Both are passthroughs outside `run`; errors recorded and re-raised; attribute/output building
+  behind the FR-T5 guards (`_close(output_factory=)`, `Recorder.end_span(usage=, attributes=)`).
+  ≈ 65 µs per `llm_call` span. `request_hash` + span order prepare cassettes (#13).
+- No new dependencies. 276 tests, 100% coverage.
+- Next: #10 OpenAI-compatible adapter (OpenAI, Ollama, vLLM, LM Studio).
