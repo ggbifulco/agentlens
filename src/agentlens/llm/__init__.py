@@ -13,6 +13,13 @@ Anthropic) without code changes::
 Real providers: :class:`OpenAICompatClient` (OpenAI, Ollama, vLLM, LM Studio via
 ``base_url``) and :class:`AnthropicClient` (Anthropic Messages API).
 Adapter failures raise subclasses of :class:`LLMError`.
+
+:func:`get_client` builds any of them from a ``"provider:model"`` spec (or
+``$AGENTLENS_MODEL``), with ``usage.cost_usd`` filled from the :class:`Pricing` table::
+
+    from agentlens.llm import get_client
+
+    llm = get_client("ollama:llama3.1")  # or "openai:gpt-4o-mini", "anthropic:...", "mock"
 """
 
 from agentlens.llm._http import RetryPolicy
@@ -24,6 +31,7 @@ from agentlens.llm.anthropic import (
 )
 from agentlens.llm.base import LLMClient
 from agentlens.llm.errors import (
+    LLMConfigError,
     LLMConnectionError,
     LLMError,
     LLMHTTPError,
@@ -31,6 +39,7 @@ from agentlens.llm.errors import (
     LLMResponseError,
     LLMTimeoutError,
 )
+from agentlens.llm.factory import MODEL_ENV, PROVIDERS, get_client, parse_spec
 from agentlens.llm.mock import (
     MockExhaustedError,
     MockLLM,
@@ -40,6 +49,7 @@ from agentlens.llm.mock import (
     count_tokens,
 )
 from agentlens.llm.openai_compat import DEFAULT_OPENAI_BASE_URL, OpenAICompatClient
+from agentlens.llm.pricing import PRICING_ENV, ModelPrice, PricedClient, Pricing
 from agentlens.llm.types import LLMRequest, LLMResponse, Message, Role, ToolCall, ToolSpec
 
 __all__ = [
@@ -47,8 +57,12 @@ __all__ = [
     "DEFAULT_ANTHROPIC_BASE_URL",
     "DEFAULT_MAX_TOKENS",
     "DEFAULT_OPENAI_BASE_URL",
+    "MODEL_ENV",
+    "PRICING_ENV",
+    "PROVIDERS",
     "AnthropicClient",
     "LLMClient",
+    "LLMConfigError",
     "LLMConnectionError",
     "LLMError",
     "LLMHTTPError",
@@ -62,11 +76,16 @@ __all__ = [
     "MockLLM",
     "MockLLMError",
     "MockNoMatchError",
+    "ModelPrice",
     "OpenAICompatClient",
+    "PricedClient",
+    "Pricing",
     "RetryPolicy",
     "Role",
     "ScriptItem",
     "ToolCall",
     "ToolSpec",
     "count_tokens",
+    "get_client",
+    "parse_spec",
 ]

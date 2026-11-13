@@ -15,6 +15,7 @@ Messages never contain the API key or request headers.
 from __future__ import annotations
 
 __all__ = [
+    "LLMConfigError",
     "LLMConnectionError",
     "LLMError",
     "LLMHTTPError",
@@ -26,6 +27,13 @@ __all__ = [
 
 class LLMError(RuntimeError):
     """Base class for failures of an LLM adapter call."""
+
+
+class LLMConfigError(LLMError, ValueError):
+    """Invalid client configuration: a bad ``get_client`` spec or pricing file.
+
+    Also a :class:`ValueError`, since it is raised for bad input before any call.
+    """
 
 
 class LLMConnectionError(LLMError):
