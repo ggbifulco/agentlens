@@ -274,6 +274,44 @@ Implementation notes (`src/agentlens/llm/`):
   (e.g. `thinking`) ignored but kept in `raw`; `usage.input_tokens` = `input_tokens` +
   `cache_creation_input_tokens` + `cache_read_input_tokens` (all are prompt tokens; `Usage`
   has no cache fields), `output_tokens` as is, `cost_usd=None` until pricing (#12).
+- `factory.py`: `get_client(spec=None, *, pricing=None, **overrides) -> LLMClient` (also
+  `agentlens.get_client`). `spec` is `"<provider>:<model>"`, split on the **first** `:` so
+  Ollama tags survive (`ollama:llama3.1:8b`); provider is case-insensitive with aliases
+  (`openai_compat`, `lm-studio`). `None` reads `AGENTLENS_MODEL` (empty counts as unset).
+  Providers and env (all read at call time; `overrides` go to the constructor and win):
+  `openai` (`OPENAI_BASE_URL`, key via the adapter's `OPENAI_API_KEY` fallback), `anthropic`
+  (`ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`), `ollama` (`OLLAMA_BASE_URL`, default
+  `http://localhost:11434/v1`), `vllm` (`VLLM_BASE_URL` `:8000/v1`, optional `VLLM_API_KEY`),
+  `lmstudio` (`LMSTUDIO_BASE_URL` `:1234/v1`), `openai-compat` (`OPENAI_COMPAT_BASE_URL`
+  required, optional `OPENAI_COMPAT_API_KEY`) — local providers pass `api_key=""`, so
+  `OPENAI_API_KEY` is never sent to a local or third-party server, and set `provider` to their
+  name (recorded by `wrap_llm`). `mock` / `mock:<name>`: `MockLLM(model=<name> or "mock")`
+  echoing the last user message (useful as a zero-config smoke-test client); `script=`,
+  `cycle=`, `default=` overrides make it a scripted mock. Bad specs, unknown providers, a
+  missing spec/env or a missing required base URL raise `LLMConfigError` (an `LLMError` and a
+  `ValueError`) listing the known providers. The provider registry is the public `PROVIDERS`
+  dict of builders `(model, overrides) -> LLMClient`.
+- `pricing.py` + packaged `pricing.yaml` (shipped in the wheel: hatchling includes non-Python
+  files under `src/agentlens`; read with `importlib.resources`): `{updated, free_providers,
+  models: {id: {input, output}}, aliases: {id: id}}`, USD per 1M tokens, **approximate list
+  prices dated in the file**. `Pricing.lookup(model)`: case-insensitive exact key, then alias,
+  then the **longest key that is a prefix followed by `-`, `:` or `@`** — dated/tagged ids
+  (`gpt-4o-mini-2024-07-18`, `claude-3-5-haiku-latest`, `claude-sonnet-4-5-20250929`) get the
+  base price, while `gpt-4omni` does not match `gpt-4o`. `Pricing.cost(model, in, out,
+  provider=)` is `0.0` for `free_providers` (`ollama`, `vllm`, `lmstudio`, `mock`) and `None`
+  for unknown models (unknown ≠ free). `Pricing.load(path=None)` = packaged table with `path`
+  (else `$AGENTLENS_PRICING`) **merged over** it — overriding a few prices or adding a model
+  needs no copy of the whole table; a missing/invalid override file fails loudly.
+- Cost is filled by a `PricedClient(client, pricing=None, provider=None)` wrapper rather than
+  inside each adapter: adapters stay pure protocol translators (and testable without a table),
+  any third-party `LLMClient` can be priced, and the table is loaded once per client. It only
+  fills `usage.cost_usd` when usage exists and the provider did not report a cost; model =
+  response `model` (the one that really answered), else request, else client default;
+  attributes delegate to the wrapped client, so `wrap_llm(get_client(...))` still records
+  `provider`/`model` and the priced usage. `get_client` wraps every HTTP client; the mock is
+  returned bare (it already reports `cost_usd=0`, and tests use its `.requests`).
+- PyYAML (`pyyaml`) is a runtime dependency (with `types-PyYAML` for mypy): the pricing table
+  is YAML, and so will be suites and gates (§6–7); `yaml.safe_load` only.
 
 ## 4. Replay
 - **Cassette**: during recording, each LLM/tool call is stored with

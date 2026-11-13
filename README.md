@@ -85,6 +85,25 @@ request = LLMRequest(messages=[Message.system("Be brief."), Message.user("Say hi
 print(claude.complete(request).content)  # e.g. Hi!
 ```
 
+Or pick the provider from config instead of code with `agentlens.get_client` — a
+`"provider:model"` spec, or the `AGENTLENS_MODEL` env var when called without one:
+
+```python
+import agentlens
+from agentlens.llm import LLMRequest
+
+llm = agentlens.get_client("mock")  # echo client, no network; try "ollama:llama3.1",
+# "openai:gpt-4o-mini" (OPENAI_API_KEY) or "anthropic:claude-3-5-haiku-latest" (ANTHROPIC_API_KEY)
+response = llm.complete(LLMRequest(messages="Hello"))
+print(response.content, response.usage)  # Hello input_tokens=1 output_tokens=1 cost_usd=0.0
+```
+
+Providers: `openai`, `anthropic`, `ollama` (`OLLAMA_BASE_URL`, default
+`http://localhost:11434/v1`), `vllm`, `lmstudio`, `openai-compat` (`OPENAI_COMPAT_BASE_URL`)
+and `mock`. Responses get `usage.cost_usd` from a packaged table of approximate prices
+(`agentlens/llm/pricing.yaml`; local models cost 0, unknown models stay `None`); merge your
+own prices with `AGENTLENS_PRICING=my-pricing.yaml` or `get_client(..., pricing=...)`.
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/).

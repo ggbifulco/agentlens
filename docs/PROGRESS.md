@@ -177,3 +177,22 @@ Append-only log of development sessions (newest at the bottom).
 - No new dependencies. Optional live test: `AGENTLENS_LIVE_TESTS=1
   AGENTLENS_LIVE_ANTHROPIC_MODEL=... ANTHROPIC_API_KEY=...`. 431 tests, 100% coverage.
 - Next: #12 Client factory from config/env + pricing table.
+
+## 2026-11-13 — #12 Client factory from config/env + pricing table
+- Added `agentlens.get_client(spec=None, *, pricing=None, **overrides)` (also in
+  `agentlens.llm`, with `parse_spec`, `PROVIDERS`, `MODEL_ENV`): `"<provider>:<model>"` specs
+  for `openai`, `anthropic`, `ollama`, `vllm`, `lmstudio`, `openai-compat` and `mock`
+  (echo `MockLLM`, scriptable via `script=`); `None` reads `AGENTLENS_MODEL`. Env:
+  `OPENAI_API_KEY`/`OPENAI_BASE_URL`, `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL`,
+  `OLLAMA_BASE_URL` (default `http://localhost:11434/v1`), `VLLM_BASE_URL`/`VLLM_API_KEY`,
+  `LMSTUDIO_BASE_URL`, `OPENAI_COMPAT_BASE_URL`/`OPENAI_COMPAT_API_KEY`; overrides win; local
+  servers never receive `OPENAI_API_KEY`. Errors: new `LLMConfigError(LLMError, ValueError)`.
+- Packaged `agentlens/llm/pricing.yaml` (approximate USD per 1M tokens, dated 2026-11-13,
+  OpenAI + Anthropic; `free_providers` ollama/vllm/lmstudio/mock cost 0) and
+  `Pricing`/`ModelPrice`: exact → alias → longest `-`/`:`/`@`-bounded prefix match, unknown
+  model → `None`; `Pricing.load()` merges `$AGENTLENS_PRICING` (or a path) over the packaged
+  table. `PricedClient` wrapper fills `usage.cost_usd` when the provider did not; `get_client`
+  wraps every HTTP client, so `wrap_llm(get_client(...))` traces carry costs.
+- New deps: `pyyaml` (runtime: pricing table now, suites/gates YAML in #20) and
+  `types-PyYAML` (dev, mypy). 519 tests, 100% coverage; wheel verified to ship `pricing.yaml`.
+- Next: #13 Cassette record/playback (strict / lenient / fallthrough).

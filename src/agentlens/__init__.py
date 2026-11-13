@@ -6,6 +6,7 @@ deterministic checks and LLM-as-judge, and catch regressions in CI.
 
 __version__ = "0.0.1"
 
+from agentlens.llm import get_client
 from agentlens.schema import SpanKind, Trace
 from agentlens.tracing import (
     PatternRedactor,
@@ -28,6 +29,7 @@ __all__ = [
     "__version__",
     "current_span",
     "current_trace",
+    "get_client",
     "redact_trace",
     "run",
     "span",
