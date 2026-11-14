@@ -1,0 +1,41 @@
+baseline   main (exp-base) baseline
+candidate  pr-42 (exp-cand)
+cases      8 paired, 1 added, 1 removed
+method     paired bootstrap, 500 resamples, 95% CI, seed 0
+
+Metrics (candidate vs baseline, paired cases)
+metric          n  baseline  candidate     delta  delta %            95% CI  status
+────────────────────────────────────────────────────────────────────────────────────────
+pass rate ↑     8         1      0.625  ↓ -0.375   -37.5%   [-0.75, -0.125]  REGRESSION
+score.exact ↑   8         1      0.625  ↓ -0.375   -37.5%   [-0.75, -0.125]  REGRESSION
+score.tone ↑    8         1          1        +0    +0.0%          [+0, +0]  unchanged
+cost (USD) ↓    8      0.01      0.013  ↑ +0.003   +30.0%  [+0.003, +0.003]  REGRESSION
+latency (ms) ↓  8       900        735    ↓ -165   -18.3%    [-180, -148.8]  improvement
+steps ↓         8         1          1        +0    +0.0%          [+0, +0]  unchanged
+↑ higher is better, ↓ lower is better; changed = the 95% CI excludes 0
+
+✗ 3 metric(s) regressed; 1 improved
+
+Case regressions (3)
+case     pass rate  runs (base/cand)  regressed evaluators
+──────────────────────────────────────────────────────────
+case-00      1 → 0               1/1  exact
+case-01      1 → 0               1/1  exact
+case-02      1 → 0               1/1  exact
+
+added cases (1): case-new
+removed cases (1): retired
+
+╭─ ✗ Gates FAILED  1 passed, 3 failed, 0 skipped ──────────────────────────────────────────────────╮
+│         gate         rule                actual  reason                                          │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ✗ FAIL  pass_rate    min 0.9              0.625  pass_rate 0.625 is below min 0.9                │
+│ ✗ FAIL  cost_usd     max_delta_pct +20%    +30%  cost_usd change +30% is above max_delta_pct     │
+│                                                  +20%                                            │
+│ ✓ PASS  latency_ms   max_delta +0          -165  latency_ms change -165 is within max_delta +0   │
+│ ✗ FAIL  regressions  max 0                    3  regressions 3 is above max 0                    │
+│ note: only 8 cases compared (present in both experiments): at least 20 are recommended for       │
+│ meaningful results (ADR 0005); not a gate failure                                                │
+│ note: 1 case only in the candidate, not part of any delta: case-new                              │
+│ note: 1 case only in the baseline, not part of any delta: retired                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

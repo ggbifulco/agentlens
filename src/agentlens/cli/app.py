@@ -16,6 +16,7 @@ from agentlens.cli._common import (
     DB_ENV,
     EXIT_GATE_FAILED,
     State,
+    auto_format,
     fail,
     open_store,
     user_errors,
@@ -198,7 +199,8 @@ def run(
         if mark_baseline and (gate_report is None or gate_report.passed):
             experiment = set_baseline(store, experiment)
             marked = True
-    typer.echo(render(ExperimentReport.from_runs(experiment, result, gates=gate_report)))
+    report = ExperimentReport.from_runs(experiment, result, gates=gate_report)
+    typer.echo(render(report, auto_format()))
     typer.echo("")
     typer.echo(f"saved experiment {experiment.name!r} to {store.path}")
     if marked:
@@ -302,7 +304,7 @@ def compare(
     if json_out == "-":
         typer.echo(render(report, ReportFormat.JSON))
     else:
-        typer.echo(render(report))
+        typer.echo(render(report, auto_format()))
         if json_out is not None:
             with user_errors():
                 _write(Path(json_out), render(report, ReportFormat.JSON))
@@ -324,14 +326,16 @@ def report(
         ),
     ],
     fmt: Annotated[
-        ReportFormat,
+        ReportFormat | None,
         typer.Option(
             "--format",
             "-f",
             case_sensitive=False,
-            help="Output format. markdown and html arrive with the reporters of #27/#28.",
+            help="Output format [default: rich on a terminal, text when piped, written to "
+            "a file or with $NO_COLOR]. markdown and html arrive with the reporters of #27/#28.",
+            show_default=False,
         ),
-    ] = ReportFormat.TEXT,
+    ] = None,
     output: Annotated[
         Path | None, typer.Option("--output", "-o", help="Write to this file instead of stdout.")
     ] = None,
@@ -341,6 +345,8 @@ def report(
     An experiment report has its totals, metrics (mean over cases) and a table
     of cases with the evaluators that failed.
     """
+    if fmt is None:
+        fmt = auto_format() if output is None else ReportFormat.TEXT
     with user_errors():
         get_renderer(fmt)  # fail before any work if the format is not available
         path = Path(target)

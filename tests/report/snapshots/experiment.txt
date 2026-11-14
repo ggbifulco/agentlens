@@ -1,0 +1,33 @@
+experiment  pr-42 (exp-cand)
+suite       support
+created     2026-01-02 03:04:05 UTC
+model       openai:gpt-4o
+git         fedcba987654
+runs        5/9 passed (56%), 1 error
+
+Metrics
+metric        mean over cases
+─────────────────────────────
+pass rate                 56%
+score.check                 1
+score.exact             0.625
+score.tone                  1
+cost (USD)              0.013
+latency (ms)            664.4
+steps                       1
+
+Failures (4 of 9 cases)
+case      passed  errors  failed evaluators
+───────────────────────────────────────────
+case-00      0/1          exact
+case-01      0/1          exact
+case-02      0/1          exact
+case-new     0/1       1
+
+╭─ ✗ Gates FAILED  0 passed, 1 failed, 0 skipped ──────────────────────────────────────────────────╮
+│         gate          rule     actual  reason                                                    │
+│ ────────────────────────────────────────────────────────────────────────                         │
+│ ✗ FAIL  success_rate  min 0.8  0.5556  pass_rate 0.5556 is below min 0.8                         │
+│ note: only 9 cases evaluated: at least 20 are recommended for meaningful results (ADR 0005); not │
+│ a gate failure                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

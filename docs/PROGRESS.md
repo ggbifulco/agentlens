@@ -480,3 +480,26 @@ Append-only log of development sessions (newest at the bottom).
 - Docs: README "pytest plugin" (verified), design §6 implementation notes. No new dependencies.
 - 1579 tests, 100% coverage.
 - Next: #26 Terminal report (rich).
+
+## 2026-11-14 — #26 Terminal report (rich)
+- Added the `rich` report format (`ReportFormat.RICH`, `RichRenderer(width=, color=)`, registered
+  with the others) plus `comparison_renderable` / `experiment_renderable` for printing on any
+  rich `Console` (`agentlens.report.terminal`).
+- Comparison view: metrics table with n, baseline, candidate, delta (`↑`/`↓` for how the value
+  moved) and delta %, 95% CI and status; colour follows the metric's direction (regression bold
+  red + `REGRESSION`, improvement green, unchanged/no data dim; colour never alone); one-line
+  verdict; case regression/improvement tables; added/removed cases; gates panel
+  (PASS/FAIL/SKIP per bound with rule, actual, reason, notes; green/red border).
+- Experiment view: header, metrics (pass rate %, mean score per evaluator, cost, latency,
+  steps), failures table (only cases that failed a repetition) or "all N cases passed", gates.
+- CLI: `run`, `compare`, `report` print rich when stdout is a TTY, plain text when piped, with
+  `NO_COLOR` or `TERM=dumb` (`FORCE_COLOR` deliberately ignored so CI logs keep plain text);
+  `report --format rich|text|json` overrides, `-o` defaults to text.
+- Snapshot tests: `tests/report/snapshots/{comparison,experiment}.txt` from a recording
+  `Console(width=100, color_system=None)`; regenerate with `AGENTLENS_UPDATE_SNAPSHOTS=1`.
+  No new test dependency.
+- `rich>=13.0` declared as a runtime dependency (already installed via Typer). Replay divergence
+  not shown (report models carry no traces). Docs: README "Command line" (example verified),
+  design §8 implementation notes, architecture.
+- 1607 tests, 100% coverage.
+- Next: #27 Markdown report and GitHub Action posting PR comment.

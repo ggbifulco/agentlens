@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -12,7 +14,7 @@ from typing import NoReturn
 import typer
 
 from agentlens.compare.gates import EXIT_GATE_FAILED, EXIT_OK
-from agentlens.report import ReportError, ReportFormatUnavailableError
+from agentlens.report import ReportError, ReportFormat, ReportFormatUnavailableError
 from agentlens.store import JSONLFormatError, SQLiteStore, StoreError
 from agentlens.suite import ExperimentNotFoundError, SuiteError
 
@@ -22,6 +24,7 @@ __all__ = [
     "EXIT_OK",
     "EXIT_USAGE",
     "State",
+    "auto_format",
     "fail",
     "open_store",
     "user_errors",
@@ -71,6 +74,24 @@ def user_errors() -> Iterator[None]:
         fail(str(exc))
     except OSError as exc:
         fail(f"{exc.strerror or exc}: {exc.filename}" if exc.filename else str(exc))
+
+
+def auto_format() -> ReportFormat:
+    """The report format for stdout when none was asked for.
+
+    ``rich`` (colours, tables) when stdout is an interactive terminal, plain
+    ``text`` otherwise: piped, redirected to a file, in CI logs, or when
+    ``$NO_COLOR`` is set or ``$TERM`` is ``dumb``. ``$FORCE_COLOR`` is not
+    honoured here, so CI logs and scripts that parse the output keep the
+    stable plain text; ``--format rich`` asks for the rich view explicitly.
+    """
+    if os.environ.get("NO_COLOR") or os.environ.get("TERM") == "dumb":
+        return ReportFormat.TEXT
+    try:
+        interactive = sys.stdout.isatty()
+    except (AttributeError, ValueError):  # replaced or closed stdout
+        interactive = False
+    return ReportFormat.RICH if interactive else ReportFormat.TEXT
 
 
 def _state(ctx: typer.Context) -> State:

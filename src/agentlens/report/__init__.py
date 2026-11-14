@@ -12,9 +12,11 @@ Build a report model, then render it in a format::
 :class:`ComparisonReport` wraps a :class:`~agentlens.compare.Comparison` and
 its gate verdict; :func:`load_report` reads either kind back from JSON.
 
-Formats available today are plain ``text`` and ``json``. The rich terminal
-report (#26), ``markdown`` (#27) and ``html`` (#28) register their renderers
-with :func:`register_renderer`.
+Formats available today are plain ``text``, ``rich`` (coloured tables for a
+terminal: ``render(report, "rich")``, or print :func:`comparison_renderable` /
+:func:`experiment_renderable` to a ``rich`` console) and ``json``.
+``markdown`` (#27) and ``html`` (#28) register their renderers with
+:func:`register_renderer`.
 """
 
 from agentlens.report.model import (
@@ -34,6 +36,11 @@ from agentlens.report.render import (
     register_renderer,
     render,
 )
+from agentlens.report.terminal import (
+    RichRenderer,
+    comparison_renderable,
+    experiment_renderable,
+)
 
 __all__ = [
     "CaseSummary",
@@ -45,7 +52,10 @@ __all__ = [
     "ReportError",
     "ReportFormat",
     "ReportFormatUnavailableError",
+    "RichRenderer",
     "available_formats",
+    "comparison_renderable",
+    "experiment_renderable",
     "fmt_value",
     "get_renderer",
     "load_report",
