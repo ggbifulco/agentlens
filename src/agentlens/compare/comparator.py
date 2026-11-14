@@ -54,6 +54,7 @@ __all__ = [
     "compare_runs",
     "experiment_runs",
     "metric_direction",
+    "run_metrics",
 ]
 
 logger = logging.getLogger("agentlens.compare")
@@ -139,6 +140,30 @@ def _metric_order(name: str) -> tuple[int, str]:
     if name.startswith(SCORE_PREFIX):
         return (1, name)
     return (2 + [COST, LATENCY, STEPS].index(name), name)
+
+
+def run_metrics(runs: ExperimentRun | Iterable[RunResult]) -> dict[str, tuple[float, int]]:
+    """Absolute metrics of one experiment, computed like the comparison's.
+
+    Each case is first averaged over its repetitions, then each metric is the
+    mean over the cases that have a value for it. Used to gate a single run
+    without a baseline.
+
+    Returns:
+        ``{metric name: (mean over cases, number of cases with a value)}``, in
+        the comparison's metric order; ``cost_usd``/``latency_ms`` are absent
+        when no run has a value.
+    """
+    if isinstance(runs, ExperimentRun):
+        runs = runs.runs
+    per_case: dict[str, list[float]] = {}
+    for case_runs in _group_by_case(runs).values():
+        for name, value in _case_values(case_runs).metrics.items():
+            per_case.setdefault(name, []).append(value)
+    return {
+        name: (math.fsum(per_case[name]) / len(per_case[name]), len(per_case[name]))
+        for name in sorted(per_case, key=_metric_order)
+    }
 
 
 # -- comparison ----------------------------------------------------------------------

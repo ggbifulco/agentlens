@@ -18,6 +18,15 @@ side of 0, so noise does not make a gate flap::
 :func:`compare_runs` does the same on in-memory results (two
 :class:`~agentlens.suite.ExperimentRun`), and :func:`paired_bootstrap` is the
 statistic on its own.
+
+Gates (FR-S5) turn a comparison, or a single run, into a pass/fail verdict
+and a process exit code::
+
+    from agentlens.compare import evaluate_gates, load_gates
+
+    report = evaluate_gates(load_gates("gates.yaml"), comparison=comparison)
+    print(report.summary())
+    raise SystemExit(report.exit_code)   # 0 pass, 1 a gate failed
 """
 
 from agentlens.compare.bootstrap import (
@@ -35,6 +44,25 @@ from agentlens.compare.comparator import (
     compare_runs,
     experiment_runs,
     metric_direction,
+    run_metrics,
+)
+from agentlens.compare.gates import (
+    CASE_REGRESSIONS,
+    COUNT_GATES,
+    DEFAULT_MIN_CASES,
+    EXIT_GATE_FAILED,
+    EXIT_OK,
+    METRIC_ALIASES,
+    REGRESSIONS,
+    GateReport,
+    GateResult,
+    GateRule,
+    Gates,
+    GatesError,
+    OnMissing,
+    evaluate_gates,
+    load_gates,
+    resolve_metric,
 )
 from agentlens.compare.model import (
     CaseComparison,
@@ -46,22 +74,39 @@ from agentlens.compare.model import (
 )
 
 __all__ = [
+    "CASE_REGRESSIONS",
+    "COUNT_GATES",
     "DEFAULT_CONFIDENCE",
+    "DEFAULT_MIN_CASES",
     "DEFAULT_RESAMPLES",
+    "EXIT_GATE_FAILED",
+    "EXIT_OK",
     "LOWER_IS_BETTER",
+    "METRIC_ALIASES",
     "PASS_RATE",
+    "REGRESSIONS",
     "SCORE_PREFIX",
     "CaseComparison",
     "CaseMetric",
     "Comparison",
     "Direction",
+    "GateReport",
+    "GateResult",
+    "GateRule",
+    "Gates",
+    "GatesError",
     "MetricDelta",
+    "OnMissing",
     "Status",
     "classify",
     "compare_experiments",
     "compare_runs",
+    "evaluate_gates",
     "experiment_runs",
+    "load_gates",
     "metric_direction",
     "paired_bootstrap",
     "percentile",
+    "resolve_metric",
+    "run_metrics",
 ]
