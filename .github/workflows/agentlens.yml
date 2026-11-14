@@ -1,0 +1,35 @@
+# Runs this repository's own GitHub Action (action.yml) on the CI demo suite: the PR's base
+# commit is the baseline, the PR is the candidate, and the report is posted as a PR comment
+# (updated in place on every push).
+name: AgentLens
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: agentlens-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  regression-check:
+    name: AgentLens regression check (demo suite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: AgentLens
+        id: agentlens
+        uses: ./
+        with:
+          suite: examples/ci_demo/suite.yaml
+          gates: examples/ci_demo/gates.yaml
+          marker: agentlens-report:ci-demo
+      - name: Outputs
+        if: ${{ !cancelled() }}
+        run: |
+          echo "passed=${{ steps.agentlens.outputs.passed }}"
+          echo "report=${{ steps.agentlens.outputs.report-path }}"

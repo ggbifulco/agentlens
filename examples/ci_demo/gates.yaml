@@ -1,0 +1,6 @@
+# Gates for the CI demo: the job fails when one of them fails.
+# Latency is measured, not scripted, so it is not gated (it would be noise here).
+success_rate: {min: 0.9, min_delta: 0}  # >= 90% of the runs pass, and no fewer than on the base
+case_regressions: {max: 0}              # no case that passed on the base branch may fail now
+steps: {max_delta: 0}                   # no extra LLM calls per case
+options: {min_cases: 10}

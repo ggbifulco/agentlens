@@ -1,0 +1,56 @@
+# AgentLens CI demo: a deterministic suite run by this repository's own CI
+# (.github/workflows/agentlens.yml) through the AgentLens GitHub Action.
+name: ci-demo
+agent: ci_demo_agent:answer
+repetitions: 1
+defaults:
+  evaluators: [no_error, {max_steps: 1}]
+cases:
+  - id: hours
+    input: "What are your opening hours?"
+    expected: "We are open 9:00-18:00, Monday to Saturday."
+    evaluators: [exact_match]
+  - id: hours-sunday
+    input: "Are you open on Sunday?"
+    expected: "We are open 9:00-18:00, Monday to Saturday."
+    evaluators: [exact_match]
+  - id: refund
+    input: "How do I get a refund?"
+    expected: "Refunds are issued within 14 days of purchase."
+    evaluators: [exact_match]
+  - id: refund-late
+    input: "Can I still get a refund after a month?"
+    expected: "Refunds are issued within 14 days of purchase."
+    evaluators: [exact_match]
+  - id: shipping
+    input: "How long does shipping take?"
+    expected: "Standard shipping takes 3-5 business days."
+    evaluators: [exact_match]
+  - id: delivery
+    input: "When will you deliver my parcel?"
+    expected: "Standard shipping takes 3-5 business days."
+    evaluators: [exact_match]
+  - id: tracking
+    input: "Where can I track my order?"
+    expected: "Track your order from the link in the confirmation email."
+    evaluators: [exact_match]
+  - id: password
+    input: "I forgot my password"
+    expected: "Reset your password from the login page."
+    evaluators: [exact_match]
+  - id: gift-card
+    input: "Do gift cards expire?"
+    expected: "Gift cards never expire."
+    evaluators: [exact_match]
+  - id: contact
+    input: "What is your email address?"
+    expected: "Write to support@example.com."
+    evaluators: [exact_match]
+  - id: phone
+    input: "Can I call you by phone?"
+    expected: "Write to support@example.com."
+    evaluators: [exact_match]
+  - id: off-topic
+    input: "Who won the football match yesterday?"
+    expected: "Sorry, I can only answer questions about the shop."
+    evaluators: [exact_match]
