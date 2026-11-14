@@ -1,7 +1,8 @@
 """The ``agentlens`` command: root options plus ``run``, ``compare`` and ``report``.
 
 Data-management commands (``baseline``, ``experiments``, ``traces``,
-``export``, ``import``) live in :mod:`agentlens.cli.data`.
+``export``, ``import``) live in :mod:`agentlens.cli.data`, the web UI
+(``ui``) in :mod:`agentlens.cli.ui`.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from agentlens.cli.data import (
     traces_app,
 )
 from agentlens.cli.github import github_app
+from agentlens.cli.ui import ui
 from agentlens.compare import (
     DEFAULT_CONFIDENCE,
     DEFAULT_RESAMPLES,
@@ -472,6 +474,7 @@ app.add_typer(traces_app, name="traces")
 app.command("export")(export_traces)
 app.command("import")(import_traces)
 app.add_typer(github_app, name="github")
+app.command("ui")(ui)
 
 
 def main() -> None:

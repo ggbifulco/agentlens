@@ -7,6 +7,7 @@
     agentlens report pr-123
     agentlens baseline set main
     agentlens traces ls --experiment pr-123
+    agentlens ui                      # local web UI on http://127.0.0.1:8765/
 
 Exit codes: :data:`EXIT_OK` (0), :data:`EXIT_GATE_FAILED` (1, a gate failed)
 and :data:`EXIT_USAGE` (2, bad arguments or configuration: invalid suite or
