@@ -1205,6 +1205,34 @@ Implementation notes (`mkdocs.yml`, `docs/`, `scripts/make_demo_gif.py`, `script
   README's "three files" example is copied verbatim into a temp dir and run through the CLI (gates
   pass; then fail after a regression), and the hook rewrites API pages only.
 
+## 8c. Packaging and release (#34)
+Implementation notes (`.github/workflows/release.yml`, `scripts/release.py`, `CHANGELOG.md`,
+`docs/releasing.md`):
+- **Version** single-sourced in `agentlens.__version__` (hatchling `[tool.hatch.version]`); a
+  `vX.Y.Z` tag must match it (`scripts/release.py check-tag`, stdlib only so it runs before any
+  install). The alternative, deriving the version from the git tag (`hatch-vcs`), would make
+  `__version__` unknown in source checkouts and archives; an explicit bump is one line.
+- **Workflow**: `build` (any trigger) → `publish` (tags only; environment `pypi`,
+  `id-token: write`, `pypa/gh-action-pypi-publish` pinned to a commit SHA) → `github-release`
+  (`contents: write`, `gh release create --verify-tag`, notes = the CHANGELOG section, sdist and
+  wheel attached; a draft prepared for the tag is deleted first). The build job checks the tag,
+  runs `uv build` and `twine check --strict`, installs the wheel in a fresh venv, checks
+  `agentlens --version`, that every package data file (pricing table, judge prompts, report and
+  UI templates, `py.typed`) is importable via `importlib.resources`, and replays the offline
+  regression story with the installed wheel (gates must exit 1). `workflow_dispatch` = rehearsal,
+  optionally uploading to TestPyPI. Permissions are per job; the top level is `contents: read`.
+- **Trusted publishing** (OIDC) instead of an API token: nothing to store or leak, and PyPI
+  records which workflow run produced each file. Uploading is gated by the `pypi` environment
+  (required reviewers recommended).
+- **PyPI long description**: `hatch-fancy-pypi-readme` (build-time only) rewrites the README's
+  relative links to absolute GitHub URLs (images to `raw.githubusercontent.com`), which PyPI
+  cannot resolve; the README stays relative for GitHub. Mermaid blocks render as code on PyPI.
+- **CHANGELOG** in Keep a Changelog format at the repo root, included in the site through
+  `pymdownx.snippets` (`docs/changelog.md`), so there is one source.
+- **Name**: the PyPI name `agentlens` belongs to an unrelated project; publishing needs a rename
+  of the distribution (import name and command can stay) or a PEP 541 transfer. See
+  `docs/releasing.md`.
+
 ## 9. Testing strategy
 - Unit tests per module; property tests (hypothesis) for schema round-trips and bootstrap.
 - Integration tests run the example agent end-to-end with `MockLLM` (no keys, deterministic).
