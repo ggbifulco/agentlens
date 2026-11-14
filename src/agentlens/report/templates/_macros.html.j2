@@ -1,0 +1,46 @@
+{% macro pill(status, label) -%}
+<span class="pill st-{{ status }}">{{ label }}</span>
+{%- endmacro %}
+
+{% macro experiment_meta(role, exp) -%}
+<div class="meta-item">
+  <dt>{{ role }}</dt>
+{% if exp %}
+  <dd>
+    <strong>{{ exp.name }}</strong>{% if exp.baseline %} <span class="tag">{{ exp.baseline }}</span>{% endif %}
+    <span class="muted small">suite <code>{{ exp.suite }}</code> · {{ exp.created }}{% if exp.model %} · model <code>{{ exp.model }}</code>{% endif %}{% if exp.git %} · git <code>{{ exp.git }}</code>{% endif %}</span>
+    <span class="muted small id">id <code>{{ exp.id }}</code></span>
+  </dd>
+{% else %}
+  <dd class="muted">in memory</dd>
+{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro runs(items, has_traces) -%}
+{% for run in items %}
+<div class="run {{ 'pass' if run.passed else 'fail' }}">
+  <div class="run-head">
+    <span class="pill st-{{ 'pass' if run.passed else 'fail' }}">{{ 'pass' if run.passed else 'fail' }}</span>
+    <span class="run-name">run #{{ run.repetition }}</span>
+    <span class="run-stats muted small">{{ run.latency }} · {{ run.cost }} · {{ run.steps }} step{{ '' if run.steps == 1 else 's' }} · {{ run.tokens }} tokens</span>
+    <a class="open-trace" href="#trace-{{ run.trace_id }}" data-trace="{{ run.trace_id }}">View trace</a>
+  </div>
+{% if run.error %}
+  <pre class="error-box">{{ run.error }}</pre>
+{% endif %}
+{% if run.evals %}
+  <ul class="evals">
+{% for ev in run.evals %}
+    <li class="{{ 'ok' if ev.passed else 'ko' }}"><span class="mark" aria-label="{{ 'passed' if ev.passed else 'failed' }}">{{ '✓' if ev.passed else '✗' }}</span> <b>{{ ev.evaluator }}</b> <span class="score">{{ ev.score }}</span>{% if ev.reason %} <span class="reason">{{ ev.reason }}</span>{% endif %}</li>
+{% endfor %}
+  </ul>
+{% endif %}
+{% if run.output %}
+  <div class="output"><span class="k">output</span> {{ run.output }}</div>
+{% endif %}
+</div>
+{% else %}
+<p class="muted small">{{ 'No runs.' if has_traces else 'Runs not included.' }}</p>
+{% endfor %}
+{%- endmacro %}

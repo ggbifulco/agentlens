@@ -1,0 +1,210 @@
+{% import "_macros.html.j2" as m %}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="AgentLens {{ version }}">
+<meta name="color-scheme" content="light dark">
+<title>{{ title }}</title>
+<style>
+{{ css }}
+</style>
+</head>
+<body class="report-{{ kind }}">
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><span class="logo" aria-hidden="true">&#9673;</span> AgentLens <span class="muted">{{ kind }} report</span></div>
+    <h1>{{ title }}</h1>
+    <p class="verdict {{ 'ok' if ok else 'ko' }}" role="status">
+      <span class="verdict-mark" aria-hidden="true">{{ '✓' if ok else '✗' }}</span>
+      <span>{{ verdict }}</span>
+    </p>
+    <dl class="meta">
+{% if kind == "comparison" %}
+      {{ m.experiment_meta("Baseline", baseline) }}
+      {{ m.experiment_meta("Candidate", candidate) }}
+{% else %}
+      {{ m.experiment_meta("Experiment", experiment) }}
+{% endif %}
+    </dl>
+    <p class="context muted">{{ context_line }}</p>
+  </div>
+</header>
+
+<main class="wrap">
+{% if cards %}
+  <section class="cards" aria-label="Summary">
+{% for card in cards %}
+    <div class="card {{ card.trend }}">
+      <div class="card-label">{{ card.label }}</div>
+      <div class="card-value">{{ card.value }}</div>
+{% if card.detail %}
+      <div class="card-detail muted">{{ card.detail }}</div>
+{% endif %}
+    </div>
+{% endfor %}
+  </section>
+{% endif %}
+
+  <section id="metrics">
+    <h2>Metrics</h2>
+{% if kind == "comparison" %}
+{% if metrics %}
+    <div class="table-scroll">
+    <table class="metrics">
+      <thead>
+        <tr><th>Metric</th><th class="num">n</th><th class="num">Baseline</th><th class="num">Candidate</th><th class="num">Δ</th><th class="num">Δ%</th><th>{{ confidence }} CI</th><th class="ci-col"><span class="visually-hidden">Interval around 0</span></th><th>Status</th></tr>
+      </thead>
+      <tbody>
+{% for row in metrics %}
+        <tr class="st-{{ row.status }}">
+          <th scope="row">{{ row.label }} <span class="better" title="{{ 'higher' if row.better == '↑' else 'lower' }} is better">{{ row.better }}</span></th>
+          <td class="num">{{ row.n }}</td>
+          <td class="num">{{ row.baseline }}</td>
+          <td class="num">{{ row.candidate }}</td>
+          <td class="num">{{ row.delta }}</td>
+          <td class="num">{{ row.delta_pct }}</td>
+          <td class="ci">{{ row.ci }}</td>
+          <td class="ci-col">
+{% if row.ci_bar %}
+            <div class="ci-bar" aria-hidden="true"><span class="zero"></span><span class="range" style="left: {{ row.ci_bar.left }}%; width: {{ row.ci_bar.width }}%"></span><span class="point" style="left: {{ row.ci_bar.point }}%"></span></div>
+{% endif %}
+          </td>
+          <td>{{ m.pill(row.status, row.status_label) }}</td>
+        </tr>
+{% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="hint muted">↑/↓: the direction that is better. A metric regresses only when its confidence interval lies entirely on the bad side of 0.</p>
+{% else %}
+    <p class="muted">No metric to compare.</p>
+{% endif %}
+{% else %}
+    <table class="metrics compact">
+      <tbody>
+{% for row in experiment_metrics %}
+        <tr><th scope="row">{{ row.label }}</th><td class="num">{{ row.value }}</td></tr>
+{% else %}
+        <tr><td class="muted">No runs.</td></tr>
+{% endfor %}
+      </tbody>
+    </table>
+{% endif %}
+  </section>
+
+{% if gates %}
+  <section id="gates">
+    <h2>Gates <span class="pill st-{{ 'pass' if gates.passed else 'fail' }}">{{ 'passed' if gates.passed else 'failed' }}</span> <span class="muted small">{{ gates.counts }}</span></h2>
+{% if gates.rows %}
+    <div class="table-scroll">
+    <table class="gates">
+      <thead><tr><th></th><th>Gate</th><th>Rule</th><th class="num">Actual</th><th>Reason</th></tr></thead>
+      <tbody>
+{% for row in gates.rows %}
+        <tr class="gate-{{ row.verdict }}">
+          <td>{{ m.pill(row.verdict, row.verdict) }}</td>
+          <td><code>{{ row.name }}</code></td>
+          <td><code>{{ row.rule }}</code></td>
+          <td class="num">{{ row.actual }}</td>
+          <td>{{ row.reason }}</td>
+        </tr>
+{% endfor %}
+      </tbody>
+    </table>
+    </div>
+{% endif %}
+{% if gates.notes %}
+    <ul class="notes">
+{% for note in gates.notes %}
+      <li>{{ note }}</li>
+{% endfor %}
+    </ul>
+{% endif %}
+  </section>
+{% endif %}
+
+  <section id="cases">
+    <h2>Cases</h2>
+    <div class="toolbar">
+      <div class="filters" role="group" aria-label="Filter cases">
+        <button type="button" class="chip active" data-filter="all">all <span class="count">{{ cases|length }}</span></button>
+{% for status, count in counts.items() %}
+        <button type="button" class="chip st-{{ status }}" data-filter="{{ status }}">{{ status_labels[status] }} <span class="count">{{ count }}</span></button>
+{% endfor %}
+      </div>
+      <input type="search" id="case-search" placeholder="Filter by case id" aria-label="Filter by case id">
+    </div>
+{% if not has_traces %}
+    <p class="hint muted">Traces are not included in this report: render it with the runs (<code>agentlens report EXPERIMENT --format html</code> or <code>agentlens compare ... --html FILE</code>) to browse them.</p>
+{% endif %}
+    <div class="case-list">
+{% for case in cases %}
+      <details class="case st-{{ case.status }}" data-status="{{ case.status }}" data-case="{{ case.case_id }}"{% if kind == "comparison" and case.status == "regression" and loop.index <= 3 %} open{% endif %}>
+        <summary>
+          {{ m.pill(case.status, case.status_label) }}
+          <code class="case-id">{{ case.case_id }}</code>
+          <span class="pairs">
+{% for pair in case.pairs %}
+            <span class="pair {{ pair.trend }}"><span class="k">{{ pair.label }}</span> {% if pair.baseline %}{{ pair.baseline }} <span aria-hidden="true">→</span><span class="visually-hidden">to</span> {% endif %}<b>{{ pair.candidate }}</b></span>
+{% endfor %}
+          </span>
+        </summary>
+        <div class="case-body">
+{% for note in case.notes %}
+          <p class="note">{{ note }}</p>
+{% endfor %}
+{% if kind == "comparison" %}
+          <div class="sides">
+            <div class="side">
+              <h3>Baseline</h3>
+              {{ m.runs(case.baseline_runs, has_traces) }}
+            </div>
+            <div class="side">
+              <h3>Candidate</h3>
+              {{ m.runs(case.candidate_runs, has_traces) }}
+            </div>
+          </div>
+{% else %}
+          {{ m.runs(case.candidate_runs, has_traces) }}
+{% endif %}
+        </div>
+      </details>
+{% else %}
+      <p class="muted">No cases.</p>
+{% endfor %}
+    </div>
+    <p class="muted empty-filter" hidden>No case matches the filter.</p>
+  </section>
+</main>
+
+<footer class="wrap muted small">Generated by AgentLens {{ version }} &middot; self-contained: no network access needed.</footer>
+
+<dialog id="trace-viewer" aria-labelledby="tv-title">
+  <div class="tv">
+    <div class="tv-head">
+      <div>
+        <div class="tv-kicker muted small">Trace</div>
+        <h2 id="tv-title"></h2>
+        <div class="tv-chips"></div>
+      </div>
+      <div class="tv-actions">
+        <button type="button" data-action="expand">Expand all</button>
+        <button type="button" data-action="collapse">Collapse all</button>
+        <button type="button" data-action="close" aria-label="Close trace viewer">Close ✕</button>
+      </div>
+    </div>
+    <div class="tv-body">
+      <div class="tv-tree" role="tree" aria-label="Span tree"></div>
+      <div class="tv-detail" aria-live="polite"></div>
+    </div>
+  </div>
+</dialog>
+
+<script type="application/json" id="agentlens-data">{{ data }}</script>
+<script>
+{{ js }}
+</script>
+</body>
+</html>
