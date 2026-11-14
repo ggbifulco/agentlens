@@ -9,10 +9,13 @@ import pytest
 
 from agentlens import __version__
 from agentlens.cli import EXIT_GATE_FAILED, EXIT_OK, EXIT_USAGE, main
-from agentlens.report import ComparisonReport, ExperimentReport, load_report
+from agentlens.cli._common import auto_format
+from agentlens.report import ComparisonReport, ExperimentReport, ReportFormat, load_report
 from agentlens.store import SQLiteStore
 from agentlens.suite import get_baseline
 from tests.cli.conftest import Toy, plain
+
+cli_app = importlib.import_module("agentlens.cli.app")
 
 # -- root ----------------------------------------------------------------------------
 
@@ -399,3 +402,79 @@ def test_report_bad_file(ran: Toy) -> None:
 
 def test_report_unknown_format(ran: Toy) -> None:
     assert ran("report", "main", "--format", "pdf").exit_code == EXIT_USAGE
+
+
+# -- rich terminal report (auto format) ----------------------------------------------
+
+
+class _Stdout:
+    def __init__(self, tty: bool | None) -> None:
+        self.tty = tty
+
+    def isatty(self) -> bool:
+        if self.tty is None:
+            raise ValueError("I/O operation on closed file")
+        return self.tty
+
+
+@pytest.mark.parametrize(
+    ("tty", "env", "expected"),
+    [
+        (True, {}, ReportFormat.RICH),
+        (False, {}, ReportFormat.TEXT),
+        (None, {}, ReportFormat.TEXT),
+        (True, {"NO_COLOR": "1"}, ReportFormat.TEXT),
+        (True, {"NO_COLOR": ""}, ReportFormat.RICH),  # empty means unset (no-color.org)
+        (True, {"TERM": "dumb"}, ReportFormat.TEXT),
+    ],
+)
+def test_auto_format(
+    monkeypatch: pytest.MonkeyPatch, tty: bool | None, env: dict[str, str], expected: ReportFormat
+) -> None:
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(sys, "stdout", _Stdout(tty))
+    assert auto_format() is expected
+
+
+@pytest.fixture
+def terminal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pretend stdout is an interactive terminal."""
+    monkeypatch.setattr(cli_app, "auto_format", lambda: ReportFormat.RICH)
+
+
+@pytest.mark.usefixtures("terminal")
+def test_report_is_rich_on_a_terminal(ran: Toy) -> None:
+    result = ran("report", "pr-1")
+    assert result.exit_code == EXIT_OK, result.output
+    assert "mean over cases" in result.stdout
+    assert "Failures (3 of 6 cases)" in result.stdout
+    assert " \n" not in result.stdout  # no trailing padding
+
+
+@pytest.mark.usefixtures("terminal")
+def test_report_to_a_file_defaults_to_text(ran: Toy) -> None:
+    out = ran.root / "report.txt"
+    assert ran("report", "pr-1", "-o", str(out)).exit_code == EXIT_OK
+    assert out.read_text().startswith("experiment  pr-1 (")
+
+
+def test_report_format_rich_when_piped(ran: Toy) -> None:
+    result = ran("report", "pr-1", "--format", "rich")
+    assert result.exit_code == EXIT_OK
+    assert "Metrics" in result.stdout
+    assert "\x1b[" not in result.stdout  # click strips colours when not on a terminal
+
+
+@pytest.mark.usefixtures("terminal")
+def test_run_and_compare_are_rich_on_a_terminal(ran: Toy) -> None:
+    result = ran("compare", "-c", "pr-1", "--resamples", "50")
+    assert result.exit_code == EXIT_OK
+    assert "Case regressions (2)" in result.stdout
+    run_result = ran("run", str(ran.suite), "-q")
+    assert run_result.exit_code == EXIT_OK
+    assert "✓ all" not in run_result.stdout  # "x" fails in the baseline suite
+    assert "Failures (1 of 6 cases)" in run_result.stdout
+    assert "saved experiment" in run_result.stdout
