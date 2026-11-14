@@ -108,7 +108,7 @@ runs:
         uv venv --quiet --python "$PYTHON_VERSION" "$venv"
         export VIRTUAL_ENV="$venv"
         if [ -n "$AGENTLENS_VERSION" ]; then
-          uv pip install --quiet "agentlens==$AGENTLENS_VERSION"
+          uv pip install --quiet "agentlens-toolkit==$AGENTLENS_VERSION"
         else
           uv pip install --quiet "$ACTION_PATH"
         fi
