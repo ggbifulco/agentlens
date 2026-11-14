@@ -127,7 +127,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/agentlens
+      url: https://test.pypi.org/p/agentlens-toolkit
     permissions:
       id-token: write # trusted publishing (OIDC)
     steps:
@@ -148,7 +148,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: pypi
-      url: https://pypi.org/p/agentlens
+      url: https://pypi.org/p/agentlens-toolkit
     permissions:
       id-token: write # trusted publishing (OIDC): no API token
     steps:

@@ -80,7 +80,7 @@ suite that runs in CI and blocks a bad PR**.
 - **NFR-3** Framework-agnostic: no hard dependency on LangChain/LlamaIndex; optional integrations.
 - **NFR-4** Local-first: works offline with SQLite; no SaaS required.
 - **NFR-5** Secrets only from env vars; never written into traces (redaction hook).
-- **NFR-6** Installable via `pip install agentlens` / `uv add agentlens`; documented public API.
+- **NFR-6** Installable via `pip install agentlens-toolkit` / `uv add agentlens-toolkit` (`agentlens` is taken on PyPI; the import name stays `agentlens`); documented public API.
 
 ## 5. Out of scope (v1)
 Hosted multi-tenant backend, auth, real-time production monitoring dashboards, prompt management.

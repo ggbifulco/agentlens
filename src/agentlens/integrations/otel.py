@@ -1,6 +1,6 @@
 """Export AgentLens traces as OpenTelemetry spans (FR-T6), following the GenAI conventions.
 
-Install the extra (``pip install "agentlens[otel]"``), configure OpenTelemetry as
+Install the extra (``pip install "agentlens-toolkit[otel]"``), configure OpenTelemetry as
 usual (an OTLP exporter to Jaeger, Grafana Tempo, Langfuse, Phoenix, ...) and pass
 an :class:`OTelExporter` as the trace sink, or call :func:`export_trace` on
 traces you already have::
@@ -66,7 +66,7 @@ try:
     from opentelemetry.util.types import AttributeValue
 except ImportError as exc:  # pragma: no cover - exercised only without the extra
     raise ImportError(
-        'agentlens.integrations.otel needs OpenTelemetry: pip install "agentlens[otel]"'
+        'agentlens.integrations.otel needs OpenTelemetry: pip install "agentlens-toolkit[otel]"'
     ) from exc
 
 __all__ = [

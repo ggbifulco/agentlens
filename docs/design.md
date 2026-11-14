@@ -147,7 +147,7 @@ Implementation notes (`src/agentlens/tracing/`):
   spans) to build a cassette from. Tool playback can hook in via `__agentlens_tool__`.
 
 Implementation notes — OpenTelemetry export (`integrations/otel.py`, #32, FR-T6):
-- Optional extra `agentlens[otel]` (`opentelemetry-api`, `opentelemetry-sdk`); the module
+- Optional extra `agentlens-toolkit[otel]` (`opentelemetry-api`, `opentelemetry-sdk`); the module
   raises an `ImportError` naming the extra when they are missing, and nothing else imports it.
 - **After the fact, not live**: `export_trace(trace, tracer=|tracer_provider=,
   capture_content=False, context=None)` replays a *finished* (redacted) trace into OTel with

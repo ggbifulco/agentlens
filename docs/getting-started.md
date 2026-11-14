@@ -26,8 +26,10 @@ AgentLens needs Python 3.11+. It is not on PyPI yet (v0.1.0 is next), so install
 
     Drop the `uv run` prefix from the commands below.
 
-To use it in your own project instead: `pip install "agentlens @ git+https://github.com/ggbifulco/agentlens"`
-(add `[otel]` for the [OpenTelemetry exporter](opentelemetry.md)).
+To use it in your own project instead: `pip install agentlens-toolkit` once it is released on PyPI,
+or `pip install "agentlens-toolkit @ git+https://github.com/ggbifulco/agentlens"` until then (add
+`[otel]` for the [OpenTelemetry exporter](opentelemetry.md)). The distribution is called
+`agentlens-toolkit` because `agentlens` is taken on PyPI; you still `import agentlens`.
 
 ## Quickstart: catch a regression in four commands
 

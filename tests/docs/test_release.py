@@ -135,7 +135,7 @@ def test_the_current_version_is_released_from_this_changelog() -> None:
 
 def test_packaging_metadata_is_release_ready() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    assert project["name"] == "agentlens"
+    assert project["name"] == "agentlens-toolkit"
     assert set(project["dynamic"]) == {"version", "readme"}
     assert project["license"] == "Apache-2.0"
     assert project["urls"]["Documentation"] == "https://ggbifulco.github.io/agentlens/"

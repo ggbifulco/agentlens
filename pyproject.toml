@@ -1,5 +1,5 @@
 [project]
-name = "agentlens"
+name = "agentlens-toolkit"
 dynamic = ["version", "readme"]
 description = "Regression testing and evaluation toolkit for LLM agents: record, replay, evaluate, compare."
 license = "Apache-2.0"

@@ -61,6 +61,11 @@ the local web UI. The [regression story](docs/regression-story.md) explains what
 why, and [Getting started](https://ggbifulco.github.io/agentlens/getting-started/) shows how to
 point AgentLens at your own agent.
 
+To use AgentLens in your own project: `pip install agentlens-toolkit` (from the first release; until
+then `pip install "agentlens-toolkit @ git+https://github.com/ggbifulco/agentlens"`). The
+distribution is `agentlens-toolkit` because `agentlens` is taken on PyPI; the import name is
+`agentlens`.
+
 ## Your own agent in three files
 
 ```python

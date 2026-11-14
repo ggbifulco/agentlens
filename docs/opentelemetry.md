@@ -1,6 +1,6 @@
 # OpenTelemetry export
 
-`pip install "agentlens[otel]"` adds an exporter that sends traces to any OpenTelemetry backend
+`pip install "agentlens-toolkit[otel]"` adds an exporter that sends traces to any OpenTelemetry backend
 (Jaeger, Grafana Tempo, Phoenix, Langfuse, ...) using the
 [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). Each run is
 exported as `invoke_agent <name>`, LLM calls as `chat <model>` (`gen_ai.provider.name`,

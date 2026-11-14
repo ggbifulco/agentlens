@@ -12,23 +12,11 @@ flowchart LR
     publish --> release["github-release<br/>notes from CHANGELOG.md<br/>sdist + wheel attached"]
 ```
 
-!!! warning "The PyPI name `agentlens` is taken"
-    As of 2026-11-14, <https://pypi.org/project/agentlens/> belongs to an unrelated project
-    (*"lightweight abstractions for building agent scaffolds"*, latest 0.1.44). A trusted
-    publisher can only be added to a project you own, or as a *pending* publisher for a name
-    that does not exist yet, so **the first release cannot be published under `agentlens`**.
-    Choose one of:
-
-    - **Rename the distribution** (the import name `agentlens` and the `agentlens` command can stay
-      the same): change `name` in `pyproject.toml`, the PyPI URLs in `release.yml`
-      (`https://pypi.org/p/<name>`), the install commands in the docs (`pip install <name>`,
-      `"<name>[otel]"`) and NFR-6 in `docs/requirements.md`. Names that were free on 2026-11-14:
-      `agentlens-ai`, `agentlens-toolkit`, `agentlens-regress`, `agentlens-testing`
-      (`agentlens-eval`, `agentlens-py` and `agentlens-cli` are taken). Check again before
-      choosing: `curl -s -o /dev/null -w '%{http_code}' https://pypi.org/pypi/<name>/json`
-      (404 = free).
-    - **Ask for the name** under [PEP 541](https://peps.python.org/pep-0541/) (name transfer
-      requests are handled by the PyPI admins and can take a long time).
+!!! note "The distribution is `agentlens-toolkit`"
+    <https://pypi.org/project/agentlens/> belongs to an unrelated project, and a trusted publisher
+    can only be added to a project you own (or as a *pending* publisher for a name that does not
+    exist yet). AgentLens is therefore published as **`agentlens-toolkit`** (maintainer's decision,
+    2026-11-14); the import name `agentlens` and the `agentlens` command are unchanged.
 
 ## One-time setup
 
@@ -38,7 +26,7 @@ flowchart LR
 
     | Field | Value |
     |---|---|
-    | PyPI Project Name | `agentlens` (or the chosen name, see above) |
+    | PyPI Project Name | `agentlens-toolkit` |
     | Owner | `ggbifulco` |
     | Repository name | `agentlens` |
     | Workflow name | `release.yml` |
@@ -86,7 +74,7 @@ that builds, checks the metadata and smoke-tests the wheel.
    workflow publishes the sdist and wheel, then creates the GitHub release *AgentLens vX.Y.Z*
    with the CHANGELOG section as notes and the distributions attached. A draft release prepared
    for the same tag is replaced.
-7. **Verify**: `pip install agentlens==X.Y.Z` in a fresh environment, `agentlens --version`.
+7. **Verify**: `pip install agentlens-toolkit==X.Y.Z` in a fresh environment, `agentlens --version`.
 
 If the build job fails (tag and version differ, missing CHANGELOG section, broken wheel),
 nothing has been published: delete the tag (`git push --delete origin vX.Y.Z`,

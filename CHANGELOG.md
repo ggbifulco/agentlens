@@ -74,7 +74,7 @@ regressions. Python 3.11-3.13, fully typed (`py.typed`), runs offline with mock 
   `compare --html`) (#63).
 - Local, read-only web UI to browse traces and experiments: `agentlens ui` (#68).
 - OpenTelemetry exporter following the GenAI semantic conventions:
-  `agentlens.integrations.otel`, optional extra `agentlens[otel]` (#67).
+  `agentlens.integrations.otel`, optional extra `agentlens-toolkit[otel]` (#67).
 
 #### Example, documentation and project
 - Example support-desk agent with mock tools, an offline scripted model and a 27-case golden
