@@ -553,3 +553,27 @@ Append-only log of development sessions (newest at the bottom).
   design §8 implementation notes, architecture.
 - 1693 tests, 100% coverage.
 - Next: #29 Example support-desk agent with mock tools and golden dataset (M6).
+
+## 2026-11-14 — #29 Example support-desk agent with mock tools and golden dataset
+- Added `examples/support_agent/` (importable as `examples.support_agent`, run from the repo
+  root): `run_agent(question, model=None, *, llm=None, prompt_version="v1", max_iterations=8)`,
+  a tool-calling loop over any `LLMClient`; model = `model=` (runner/CLI) > `$AGENTLENS_MODEL` >
+  `mock:support`; LLM wrapped with `wrap_llm`, tools with `wrap_tool`; `python -m
+  examples.support_agent "question" [--model]`.
+- Tools `lookup_order`, `issue_refund`, `track_order`, `update_address`, `escalate_to_human`,
+  `search_faq` (JSON-schema `TOOL_SPECS`) over a per-run copy of a fixed in-memory database
+  (customers, orders, FAQ; `TODAY` = 2026-11-01). Business errors and model mistakes (unknown
+  tool, bad arguments) become `{"error": ...}` tool results.
+- Policy (30-day refund window, $200 limit → escalate, escalate on request) lives in
+  `prompts/system_v1.txt` (`PROMPT_VERSION`), not in the tools, ready for the #30 regression story.
+- Offline model `mock:support`: a callable `MockLLM` script that detects intents per clause,
+  replays per-intent state machines over the tool results in the conversation, and reads the
+  policy numbers from the system prompt (removing the limit makes 2 cases fail — tested).
+- Golden dataset: 27 cases in `cases.yaml` (refunds, policy refusals, tracking, unknown orders,
+  address changes, FAQ, escalation, multi-step, off-topic); `suite.yaml` deterministic
+  (`no_error`, `max_steps`, `tool_sequence`, `contains`/`regex`), `suite.judges.yaml` adds
+  `llm_rubric`. README in the example folder; root README section; design §6 notes.
+- Tests `tests/examples/test_support_agent.py`: 100% offline pass, exact tool lists, concurrency
+  isolation, prompt-change regression, loop/tool edge cases, optional `live` run. No new
+  dependencies. 1730 tests, 100% coverage of `agentlens`.
+- Next: #30 End-to-end test and regression story in CI.
