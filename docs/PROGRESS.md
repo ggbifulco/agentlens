@@ -612,3 +612,24 @@ Append-only log of development sessions (newest at the bottom).
   the hot path intact). Docs: README "OpenTelemetry export" (verified), design §2 notes.
 - 17 new tests (SDK `InMemorySpanExporter`). 1750 tests, 100% coverage.
 - Next: #33 Docs (quickstart, mkdocs site), #34 release. #31 is being done by another session.
+
+## 2026-11-14 — #31 Local web UI (agentlens ui) to browse traces and experiments
+- New package `agentlens.ui`: `UIApp(db, gates=, resamples=, seed=, confidence=)` (pure router:
+  `handle(method, target) -> Response`), `make_server(app, host="127.0.0.1", port=8765)` →
+  `UIServer` (`http.server.ThreadingHTTPServer`; `port=0` = ephemeral), `serve(server,
+  open_browser=)`. CLI `agentlens ui [--host --port --db --gates --open/--no-open]`.
+- Pages: `/traces` (filters name, experiment id/name, case, `meta=key=value`, errors only; limit +
+  offset pagination; status error/fail/pass/ok with failed evaluators), `/traces/{id}` (span tree:
+  the report's viewer rendered inline), `/experiments` (baseline marked, radio picker,
+  *vs baseline*), `/experiments/{id}` and `/compare?baseline=&candidate=` (the HTML report pages
+  with UI navigation; gates from `--gates`). JSON API under `/api/` (traces, trace, experiments,
+  experiment report, comparison = the CLI's `--json`).
+- Read-only (GET/HEAD; 405 otherwise), 400 on bad parameters, 404 on unknown ids, 503 while the
+  database does not exist (never created by the UI). Loopback bind + Host-header check (DNS
+  rebinding), strict CSP, `nosniff`, `no-store`; everything escaped (XSS strings in every field).
+- Store: `list_traces(has_error=, offset=)`. Report: `HtmlRenderer._chrome()` hook (nav/footer),
+  `report.js` inline mode.
+- No new dependency (stdlib server instead of the FastAPI the issue suggested; rationale in
+  design §8 notes). Screenshots `docs/images/web-ui{,-trace}.png` (`scripts/screenshot_web_ui.py`).
+- 1856 tests, 100% coverage.
+- Next: #33 Docs (quickstart, mkdocs site), then #34 release.

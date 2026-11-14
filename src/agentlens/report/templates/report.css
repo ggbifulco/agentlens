@@ -206,3 +206,8 @@ dialog#trace-viewer::backdrop { background: rgb(0 0 0 / .45); }
 .j-str { color: var(--green); }
 .j-num { color: var(--amber); }
 .j-lit { color: var(--k-agent_step); }
+.nav { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; font-size: 13px; margin-bottom: 4px; }
+.nav a { color: var(--muted); text-decoration: none; font-weight: 600; }
+.nav a.brand { color: var(--accent); }
+.nav a.active, .nav a:hover { color: var(--fg); }
+.nav a.active { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 2px; text-decoration-color: var(--accent); }

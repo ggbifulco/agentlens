@@ -1,0 +1,44 @@
+{% extends "layout.html.j2" %}
+{% block header %}
+    <h1>{{ trace.name }}{% if case_id %} <span class="muted">· <code>{{ case_id }}</code> #{{ run.repetition }}</span>{% endif %}</h1>
+    <p class="verdict {{ 'ok' if run.passed else 'ko' }}" role="status">
+      <span class="verdict-mark" aria-hidden="true">{{ '✓' if run.passed else '✗' }}</span>
+      <span>{{ 'passed' if run.passed else 'failed' }}{% if error %} · {{ error }}{% endif %}</span>
+    </p>
+    <dl class="meta">
+      <div class="meta-item"><dt>Started</dt><dd>{{ started }} UTC</dd></div>
+      <div class="meta-item"><dt>Run</dt><dd>{{ latency }} · {{ cost }} · {{ trace.n_steps }} step{{ '' if trace.n_steps == 1 else 's' }} · {{ trace.total_tokens }} tokens</dd></div>
+{% if experiment %}
+      <div class="meta-item"><dt>Experiment</dt><dd><a href="{{ experiment_href }}">{{ experiment.name }}</a>{% if experiment.is_baseline %} <span class="tag">baseline</span>{% endif %} <span class="muted small">suite <code>{{ experiment.suite }}</code></span></dd></div>
+{% endif %}
+      <div class="meta-item"><dt>Trace id</dt><dd><code>{{ trace.id }}</code><span class="small"><a href="{{ api_href }}">JSON</a>{% if siblings_href %} · <a href="{{ siblings_href }}">all runs of this case</a>{% endif %}</span></dd></div>
+    </dl>
+{% endblock %}
+{% block content %}
+  <dialog id="trace-viewer" class="inline-viewer" data-inline="{{ trace.id }}" open aria-labelledby="tv-title">
+    <div class="tv">
+      <div class="tv-head">
+        <div>
+          <div class="tv-kicker muted small">Span tree</div>
+          <h2 id="tv-title"></h2>
+          <div class="tv-chips"></div>
+        </div>
+        <div class="tv-actions">
+          <button type="button" data-action="expand">Expand all</button>
+          <button type="button" data-action="collapse">Collapse all</button>
+        </div>
+      </div>
+      <div class="tv-body">
+        <div class="tv-tree" role="tree" aria-label="Span tree"></div>
+        <div class="tv-detail" aria-live="polite"></div>
+      </div>
+    </div>
+  </dialog>
+  <noscript><p class="muted">The span tree needs JavaScript; <a href="{{ api_href }}">the trace as JSON</a>.</p></noscript>
+{% endblock %}
+{% block scripts %}
+<script type="application/json" id="agentlens-data">{{ data }}</script>
+<script>
+{{ js }}
+</script>
+{% endblock %}

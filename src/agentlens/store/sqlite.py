@@ -52,6 +52,14 @@ def _metadata_clause(key: str, value: MetadataScalar) -> tuple[str, list[object]
     raise TypeError(f"metadata filter values must be JSON scalars, got {type(value).__name__}")
 
 
+_ERROR_CLAUSE = (
+    "(json_extract(traces.data, '$.error') IS NOT NULL OR EXISTS ("
+    "SELECT 1 FROM json_each(traces.data, '$.spans') AS s "
+    "WHERE json_extract(s.value, '$.error') IS NOT NULL))"
+)
+"""SQL condition: the run or one of its spans recorded an error."""
+
+
 class SQLiteStore:
     """A :class:`~agentlens.store.Store` backed by a SQLite database file.
 
@@ -161,11 +169,20 @@ class SQLiteStore:
         name: str | None = None,
         experiment_id: str | None = None,
         metadata: Mapping[str, MetadataScalar] | None = None,
+        has_error: bool | None = None,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[Trace]:
-        """Traces matching all given filters, most recent first."""
+        """Traces matching all given filters, most recent first.
+
+        ``has_error=True`` keeps traces where the run or any of its spans
+        recorded an error (``False``: neither did). ``offset`` skips that many
+        matches first (pagination together with ``limit``).
+        """
         where: list[str] = []
         params: list[object] = []
+        if has_error is not None:
+            where.append(_ERROR_CLAUSE if has_error else f"NOT {_ERROR_CLAUSE}")
         if name is not None:
             where.append("name = ?")
             params.append(name)
@@ -185,6 +202,13 @@ class SQLiteStore:
                 raise ValueError("limit must be >= 0")
             sql += " LIMIT ?"
             params.append(limit)
+        if offset < 0:
+            raise ValueError("offset must be >= 0")
+        if offset:
+            if limit is None:
+                sql += " LIMIT -1"  # SQLite needs a LIMIT before OFFSET; -1 = no limit
+            sql += " OFFSET ?"
+            params.append(offset)
         return [Trace.model_validate_json(str(data)) for (data,) in self._query(sql, params)]
 
     # -- experiments ---------------------------------------------------------

@@ -1,0 +1,10 @@
+{% extends "layout.html.j2" %}
+{% block header %}
+    <h1>{{ title }} <span class="muted small">HTTP {{ status }}</span></h1>
+{% endblock %}
+{% block content %}
+  <section class="error-page">
+    <p class="error-box">{{ message }}</p>
+    <p class="muted"><a href="/traces">Traces</a> · <a href="/experiments">Experiments</a></p>
+  </section>
+{% endblock %}

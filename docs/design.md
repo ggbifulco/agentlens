@@ -181,6 +181,9 @@ Implementation notes — OpenTelemetry export (`integrations/otel.py`, #32, FR-T
 - `SQLiteStore(path=".agentlens/agentlens.db")`: each object is one JSON document (`data`)
   plus copied columns used to filter/sort (`name`, `experiment_id`, `start_time`, ...).
   Timestamps are fixed-width UTC ISO strings so text order = time order.
+- `list_traces(..., has_error=, offset=)` (#31): `has_error=True` keeps traces where the run or
+  any span recorded an error (`json_extract` on `$.error` + `json_each` over `$.spans`), `False`
+  the others; `offset` + `limit` paginate (SQLite `LIMIT -1 OFFSET n` when only an offset).
 - Metadata filter = equality on JSON scalars via `json_each`, comparing the JSON type too
   (`True` ≠ `1`, `None` ≠ missing key; `3` = `3.0`).
 - Relations: trace → experiment and eval result → trace are foreign keys (`ON DELETE CASCADE`);
@@ -1116,7 +1119,56 @@ Implementation notes — HTML report (`src/agentlens/report/html.py`, `report/te
   screenshots in `docs/images/` are regenerated with `scripts/html_report_demo.py` +
   `scripts/screenshot_html_report.py` (Playwright, not a project dependency).
 
-- **Not yet**: `agentlens ui` (M6), the pairwise judge in `compare` (§7 note), user `config`
+Implementation notes — local web UI (`src/agentlens/ui/`, `cli/ui.py`, #31, FR-C4):
+- **Command**: `agentlens ui [--host 127.0.0.1] [--port 8765] [--db PATH] [--gates FILE]
+  [--open/--no-open]` (`--db` on the command overrides the global one). Serves until Ctrl+C; a
+  busy port or an invalid gates file exits 2. A missing database is *not* created: pages answer
+  503 explaining how to create one, and the UI picks the file up as soon as it exists.
+- **Stack: standard library server + server-rendered Jinja2, no new dependency.** The issue
+  suggested FastAPI; for a local, single-user, read-only browser over one SQLite file, a router of
+  ten regexes over `http.server.ThreadingHTTPServer` covers it, while FastAPI would add
+  FastAPI + Starlette + uvicorn (+ anyio, h11, ...) to every install of a testing library (or an
+  extra). Alternatives considered: FastAPI/Starlette (async, OpenAPI docs: not needed here), a
+  SPA (React/Vite; a build step and a JS toolchain in a Python repo), loading JS from a CDN
+  (breaks offline use and the CSP). Trade-off accepted: no async, no auto-generated API docs.
+- **Split**: `UIApp.handle(method, target) -> Response` is pure (no sockets: tested directly,
+  fast), `UIServer`/`make_server`/`serve` adapt it to HTTP. `make_server(app, port=0)` gives an
+  ephemeral port, so tests and the CLI test run a real server in a thread without blocking.
+- **Routes** (GET/HEAD only; anything else 405 with `Allow`, and `Connection: close` since the
+  body is not read): `/traces` (filters `name`, `experiment` id-or-name, `case_id`,
+  `meta=key=value` repeatable — the value is read as JSON when it is a JSON scalar, so
+  `repetition=0` matches the number —, `errors=1|0`, `limit` 1-500 default 50, `offset`; one extra
+  row is fetched to know whether there is a next page, no COUNT), `/traces/{id}`, `/experiments`
+  (filters `name`, `suite`, `baseline`), `/experiments/{id-or-name}`, `/compare?baseline=&candidate=`
+  (`baseline` defaults to the candidate's suite baseline, like the CLI; `resamples`, `seed`,
+  `confidence` override; `--gates` applied when given; no parameters → redirect to the picker on
+  `/experiments`), and `/api/traces`, `/api/traces/{id}`, `/api/experiments`,
+  `/api/experiments/{id}`, `/api/compare` (the latter two are the same JSON as `report/compare
+  --json`). Bad parameters → 400, unknown ids → 404 (HTML page or `{"error": ...}` under `/api`).
+- **Reuse of the HTML report**: the experiment and comparison pages *are* `HtmlRenderer` pages
+  (metrics with CI bars, gates, per-case side-by-side runs, modal trace viewer) through a subclass
+  overriding the new `_chrome()` hook (navigation + footer). The UI's own pages extend a layout
+  that inlines `report.css` + a small `ui.css` and import the report's macros (Jinja
+  `ChoiceLoader`). The trace page embeds the same JSON payload and `report.js` with the dialog
+  marked `data-inline` (rendered in the page, not modal). Trace list status: `error` (run or
+  span), `fail` (an evaluator failed, names shown), `pass`, `ok` (not evaluated).
+- **Security**: binds `127.0.0.1` by default. On a loopback bind, requests whose `Host` is not
+  `127.0.0.1`/`localhost`/`[::1]` (with or without the port) get 400 — defence against DNS
+  rebinding, where a web page's script reaches the local port under its own host name. Every
+  response: `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline';
+  script-src 'unsafe-inline'; img-src data:; form-action 'self'; base-uri 'none';
+  frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+  `Cache-Control: no-store`. Escaping as in the report (autoescape, `script_json`, `textContent`);
+  tests put `</script><script>alert(1)</script>` in trace names, inputs, metadata, case ids,
+  experiment names and URLs. The UI never writes to the database (opening it applies pending
+  migrations, as every command does).
+- **Tests**: `tests/ui/test_app.py` (routing, filters, pagination, statuses, missing/corrupt DB,
+  escaping), `tests/ui/test_server.py` (a real server on an ephemeral port with httpx: headers,
+  HEAD, 405, Host check, keep-alive), `tests/cli/test_ui.py` (`serve_forever` patched to answer
+  one request from a thread, so the command's wiring is exercised end to end without blocking).
+  Screenshots `docs/images/web-ui{,-trace}.png` via `scripts/screenshot_web_ui.py` (Playwright).
+
+- **Not yet**: the pairwise judge in `compare` (§7 note), user `config`
   values on `run` (Python API only).
 
 ## 9. Testing strategy

@@ -102,6 +102,9 @@
 
   // -- trace viewer -----------------------------------------------------------------
   var dialog = document.getElementById("trace-viewer");
+  if (!dialog) return;
+  // data-inline: the viewer is part of the page (the local UI's trace page), not a modal.
+  var inlineId = dialog.dataset.inline || "";
   var tree = dialog.querySelector(".tv-tree");
   var detail = dialog.querySelector(".tv-detail");
 
@@ -113,7 +116,7 @@
     detail.appendChild(head);
     keyValues(detail, [
       ["case", trace.case_id],
-      ["run", "#" + trace.repetition + (trace.side ? " (" + trace.side + ")" : "")],
+      ["run", trace.case_id === null ? null : "#" + trace.repetition + (trace.side ? " (" + trace.side + ")" : "")],
       ["result", trace.passed ? "passed" : "failed"],
       ["latency", fmtMs(trace.latency_ms)],
       ["cost", fmtCost(trace.cost_usd)],
@@ -255,7 +258,8 @@
     var trace = DATA.traces[id];
     if (!trace) return false;
     document.getElementById("tv-title").textContent =
-      trace.case_id + " · run #" + trace.repetition + (trace.side ? " · " + trace.side : "");
+      (trace.case_id === null ? trace.name : trace.case_id + " · run #" + trace.repetition) +
+      (trace.side ? " · " + trace.side : "");
     var chips = dialog.querySelector(".tv-chips");
     chips.replaceChildren();
     chip(chips, trace.passed ? "passed" : "failed", trace.passed ? "good" : "bad");
@@ -279,6 +283,7 @@
   }
 
   function closeTrace() {
+    if (inlineId) return;
     if (typeof dialog.close === "function") dialog.close();
     else dialog.removeAttribute("open");
   }
@@ -313,6 +318,10 @@
     var hash = decodeURIComponent(location.hash || "");
     if (hash.indexOf("#trace-") === 0) openTrace(hash.slice(7));
   }
-  window.addEventListener("hashchange", fromHash);
-  fromHash();
+  if (inlineId) {
+    openTrace(inlineId);
+  } else {
+    window.addEventListener("hashchange", fromHash);
+    fromHash();
+  }
 })();
