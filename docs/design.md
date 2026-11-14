@@ -743,7 +743,8 @@ FR-S2/FR-S3):
 - Metrics per case: pass rate, mean score per evaluator, cost, latency, steps.
 - Aggregate delta with **paired bootstrap** (10k resamples over cases) → 95% CI.
   Regression = CI entirely below 0 for "higher is better" metrics.
-- Gates YAML: `success_rate: {min: 0.9}`, `cost_usd: {max_delta_pct: 20}`, `regressions: {max: 0}`.
+- Gates YAML: `success_rate: {min: 0.9}`, `cost_usd: {max_delta_pct: 20}`, `regressions: {max: 0}`
+  (see the gates implementation notes below).
 
 Implementation notes — comparator (`src/agentlens/compare/`, #22, FR-S4, ADR 0005):
 - **API**: `compare_experiments(store, baseline, candidate, *, resamples=10_000, seed=0,
@@ -795,6 +796,39 @@ Implementation notes — comparator (`src/agentlens/compare/`, #22, FR-S4, ADR 0
   CLI/gates layer (#23/#24), which can call `PairwiseJudge.compare` per shared case on one
   baseline and one candidate trace (`experiment_runs` gives both) and add the results as a
   `score.pairwise` metric.
+
+Implementation notes — gates (`src/agentlens/compare/gates.py`, #23, FR-S5):
+- **File format**: a flat mapping `metric: {rule: value}` plus an optional reserved `options:`
+  key (`min_cases`, default 20; `on_missing`, default `fail`). Metrics are the comparison's
+  (`pass_rate`, `score.<evaluator>`, `cost_usd`, `latency_ms`, `steps`) with the aliases
+  `success_rate`, `cost`, `latency`, plus two counts that need a comparison: `regressions`
+  (aggregate metrics with `status == regression`, i.e. CI entirely on the bad side) and
+  `case_regressions` (cases whose pass rate dropped). Two names for the same metric is an error.
+- **Rules** (all inclusive, compared with a 1e-9 relative tolerance so `27/30` meets `min: 0.9`):
+  `min`/`max` on the candidate value; `min_delta`/`max_delta` on `candidate - baseline`;
+  `min_delta_pct`/`max_delta_pct` on `delta_pct`. Delta rules use the point estimate, not the CI:
+  "cost may grow at most 20 %" is a budget, while "beyond noise" is what `regressions` checks.
+  Counts accept only `min`/`max`. Each bound gives its own `GateResult`.
+- **Where values come from**: `evaluate_gates(gates, comparison=None, run=None)`. With `run`
+  (an `ExperimentRun` or runs), `min`/`max` use `run_metrics(run)` — the candidate over *all*
+  its cases, averaged like the comparator (per case over repetitions, then over cases). Without
+  it they use the comparison's candidate means over the paired cases. Neither → `ValueError`.
+- **Missing data** (metric absent, `no_data`, percentage change with a 0 baseline and a non-zero
+  delta): the gate **fails** with the reason by default — a gate that silently stops checking
+  (e.g. a renamed evaluator, costs no longer recorded) is worse than a red build — and
+  `on_missing: skip` (per gate or in `options`) skips it. Not *applicable* is different: delta
+  and count gates without a comparison are skipped and a note says how many, so
+  `agentlens run --gates` can gate absolute values before any baseline exists.
+- **Report**: `GateResult(name, metric, rule, threshold, actual, passed, skipped, reason)`,
+  `GateReport(passed, results, notes)` with `exit_code` (`EXIT_OK` 0 / `EXIT_GATE_FAILED` 1;
+  the CLI (#24) owns any other code, e.g. for usage/config errors), `failures`, `skipped`,
+  `summary()`. Pydantic, so it round-trips through JSON for reporters (#26-#28). Notes never fail:
+  fewer than `min_cases` cases (ADR 0005's ~20), cases only in one experiment.
+- **Loading**: `load_gates(path)` reuses the suite loader's position-tracking YAML parser
+  (`suite.source.load_yaml`), so every problem (unknown metric/rule with "did you mean", bad
+  value, `min > max`, delta rules on counts, duplicate keys, YAML syntax) is collected into one
+  `GatesError` (a `SuiteError` subclass, same `SuiteIssue` formatting) at its `file:line:column`.
+  `Gates.from_dict` does the same without positions; `Gates(rules=...)` validates in Python.
 
 ## 8. CLI
 `agentlens run`, `agentlens compare`, `agentlens report`, `agentlens baseline set`,
