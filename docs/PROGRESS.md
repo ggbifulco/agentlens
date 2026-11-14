@@ -633,3 +633,26 @@ Append-only log of development sessions (newest at the bottom).
   design §8 notes). Screenshots `docs/images/web-ui{,-trace}.png` (`scripts/screenshot_web_ui.py`).
 - 1856 tests, 100% coverage.
 - Next: #33 Docs (quickstart, mkdocs site), then #34 release.
+
+## 2026-11-14 — #33 Docs: README quickstart, diagrams, GIF, mkdocs site
+- **mkdocs-material site** (`mkdocs.yml`, `strict: true`, site URL
+  `https://ggbifulco.github.io/agentlens/`): Home, Getting started, Concepts (tracing, LLM
+  clients, store, replay, evaluators, LLM judges + bias & calibration, suites, comparison & gates,
+  reports), Guides (CLI, GitHub Action, pytest plugin, web UI, OpenTelemetry, regression story),
+  Design (architecture, design, requirements, ADRs, development log) and an **API reference**
+  (mkdocstrings, one page per package). Mermaid diagrams, light/dark palette, code copy, search.
+- Docs deps in a uv dependency group `docs` (`mkdocs-material`, `mkdocstrings[python]`), not
+  runtime and not in `dev`. Hook `scripts/mkdocs_hooks.py` strips Sphinx roles on API pages;
+  four docstrings split one-parameter-per-entry so griffe's strict build passes.
+- **README** restructured: pitch, badges (CI, docs, Python, license, ruff), demo GIF, features with
+  links, offline **quickstart** (run baseline, run v2 prompt, compare with gates + HTML report;
+  verified in fresh clones with `uv sync` and with `pip install -e .`), "your own agent in three
+  files", mermaid architecture, screenshots, docs index. Long sections moved unchanged to pages.
+- **Demo GIF** `docs/images/demo.gif` (~350 KB, 225 frames): `scripts/make_demo_gif.py` runs the
+  real commands in a pty and draws frames with Pillow (`uv run --with pillow`, not a dependency).
+- **CI**: job `docs` in `ci.yml` (`uv run --only-group docs mkdocs build --strict`);
+  `.github/workflows/docs.yml` deploys to Pages on `main` (upload-pages-artifact v4 +
+  deploy-pages v4, `pages: write`, `id-token: write`). Enabling Pages via REST was refused by the
+  proxy: **manual step** Settings → Pages → Source: GitHub Actions.
+- 7 new tests (`tests/docs/test_docs.py`). 1863 tests, 100% coverage.
+- Next: #34 release (v0.1.0 on PyPI).
