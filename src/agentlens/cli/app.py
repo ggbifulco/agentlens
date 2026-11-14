@@ -28,6 +28,7 @@ from agentlens.cli.data import (
     import_traces,
     traces_app,
 )
+from agentlens.cli.github import github_app
 from agentlens.compare import (
     DEFAULT_CONFIDENCE,
     DEFAULT_RESAMPLES,
@@ -41,6 +42,8 @@ from agentlens.compare import (
 from agentlens.report import (
     ComparisonReport,
     ExperimentReport,
+    MarkdownRenderer,
+    Renderer,
     ReportFormat,
     get_renderer,
     load_report,
@@ -170,6 +173,15 @@ def run(
     quiet: Annotated[
         bool, typer.Option("--quiet", "-q", help="No per-run progress on stderr.")
     ] = False,
+    json_out: Annotated[
+        str | None,
+        typer.Option(
+            "--json",
+            metavar="PATH",
+            help="Also write the report (with the gate verdict) as JSON, for `agentlens "
+            "report`; '-' prints JSON to stdout instead of text.",
+        ),
+    ] = None,
 ) -> None:
     """Run a suite, save it as an experiment and print a summary.
 
@@ -200,11 +212,19 @@ def run(
             experiment = set_baseline(store, experiment)
             marked = True
     report = ExperimentReport.from_runs(experiment, result, gates=gate_report)
-    typer.echo(render(report, auto_format()))
-    typer.echo("")
-    typer.echo(f"saved experiment {experiment.name!r} to {store.path}")
+    if json_out == "-":
+        typer.echo(render(report, ReportFormat.JSON))
+    else:
+        typer.echo(render(report, auto_format()))
+        typer.echo("")
+        if json_out is not None:
+            with user_errors():
+                _write(Path(json_out), render(report, ReportFormat.JSON))
+    # Status lines go to stderr when stdout carries JSON.
+    to_err = json_out == "-"
+    typer.echo(f"saved experiment {experiment.name!r} to {store.path}", err=to_err)
     if marked:
-        typer.echo(f"marked as the baseline of suite {experiment.suite!r}")
+        typer.echo(f"marked as the baseline of suite {experiment.suite!r}", err=to_err)
     elif mark_baseline:
         typer.echo("not marked as the baseline: a gate failed", err=True)
     _exit_on_gates(gate_report)
@@ -332,12 +352,22 @@ def report(
             "-f",
             case_sensitive=False,
             help="Output format [default: rich on a terminal, text when piped, written to "
-            "a file or with $NO_COLOR]. markdown and html arrive with the reporters of #27/#28.",
+            "a file or with $NO_COLOR]. markdown is GitHub-flavoured, for PR comments; html "
+            "arrives with the reporter of #28.",
             show_default=False,
         ),
     ] = None,
     output: Annotated[
         Path | None, typer.Option("--output", "-o", help="Write to this file instead of stdout.")
+    ] = None,
+    marker: Annotated[
+        str | None,
+        typer.Option(
+            "--marker",
+            help="markdown only: key of the hidden <!-- KEY --> first line that "
+            "`agentlens github comment` finds to update its comment [default: agentlens-report].",
+            show_default=False,
+        ),
     ] = None,
 ) -> None:
     """Report on an experiment, or re-render a saved comparison.
@@ -347,8 +377,16 @@ def report(
     """
     if fmt is None:
         fmt = auto_format() if output is None else ReportFormat.TEXT
+    if marker is not None and fmt is not ReportFormat.MARKDOWN:
+        raise typer.BadParameter("only applies to --format markdown", param_hint="'--marker'")
     with user_errors():
-        get_renderer(fmt)  # fail before any work if the format is not available
+        # Fail before any work if the format is not available or the marker is invalid.
+        renderer: Renderer = get_renderer(fmt)
+        if marker is not None:
+            try:
+                renderer = MarkdownRenderer(marker=marker)
+            except ValueError as exc:
+                raise typer.BadParameter(str(exc), param_hint="'--marker'") from None
         path = Path(target)
         loaded: ExperimentReport | ComparisonReport
         if path.is_file():
@@ -359,7 +397,10 @@ def report(
             with open_store(ctx) as store:
                 experiment = find_experiment(store, target)
                 loaded = ExperimentReport.from_runs(experiment, experiment_runs(store, experiment))
-        text = render(loaded, fmt)
+        if isinstance(loaded, ComparisonReport):
+            text = renderer.comparison(loaded)
+        else:
+            text = renderer.experiment(loaded)
         if output is None:
             typer.echo(text)
         else:
@@ -373,6 +414,7 @@ app.add_typer(experiments_app, name="experiments")
 app.add_typer(traces_app, name="traces")
 app.command("export")(export_traces)
 app.command("import")(import_traces)
+app.add_typer(github_app, name="github")
 
 
 def main() -> None:
