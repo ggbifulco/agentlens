@@ -29,6 +29,9 @@ dependencies = [
 [project.scripts]
 agentlens = "agentlens.cli:app"
 
+[project.entry-points.pytest11]
+agentlens = "agentlens.integrations.pytest_plugin"
+
 [project.urls]
 Homepage = "https://github.com/ggbifulco/agentlens"
 Issues = "https://github.com/ggbifulco/agentlens/issues"
@@ -96,7 +99,12 @@ warn_required_dynamic_aliases = true
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-addopts = ["-ra", "--strict-markers", "--strict-config", "--cov=agentlens", "--cov-report=term-missing"]
+# `-p no:agentlens`: our own pytest plugin (entry point) would import `agentlens` before
+# coverage starts, hiding every module-level line; its tests load it in pytester runs.
+addopts = [
+    "-ra", "--strict-markers", "--strict-config", "-p", "no:agentlens",
+    "--cov=agentlens", "--cov-report=term-missing",
+]
 markers = [
     "live: tests that call real LLM providers (need API keys; skipped by default)",
 ]
