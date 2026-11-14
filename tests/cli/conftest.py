@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 import textwrap
 from collections.abc import Iterator
@@ -51,6 +52,15 @@ def suite_yaml(agent: str, cases: list[tuple[str, str, str]], repetitions: int =
     ]
     lines += [f'  - {{id: {cid}, input: "{inp}", expected: "{exp}"}}' for cid, inp, exp in cases]
     return "\n".join(lines) + "\n"
+
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def plain(text: str) -> str:
+    """``text`` without ANSI colours (Click/rich colour usage errors when ``FORCE_COLOR`` is set,
+    as in CI)."""
+    return _ANSI.sub("", text)
 
 
 @dataclass

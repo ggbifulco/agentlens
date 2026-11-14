@@ -12,7 +12,7 @@ from agentlens.cli import EXIT_GATE_FAILED, EXIT_OK, EXIT_USAGE, main
 from agentlens.report import ComparisonReport, ExperimentReport, load_report
 from agentlens.store import SQLiteStore
 from agentlens.suite import get_baseline
-from tests.cli.conftest import Toy
+from tests.cli.conftest import Toy, plain
 
 # -- root ----------------------------------------------------------------------------
 
@@ -301,7 +301,7 @@ def test_compare_without_a_suite_baseline(toy: Toy) -> None:
 def test_compare_usage_errors(ran: Toy, args: list[str], message: str) -> None:
     result = ran("compare", *args)
     assert result.exit_code == EXIT_USAGE
-    assert message in result.stderr
+    assert message in plain(result.stderr)
 
 
 def test_compare_requires_a_candidate(ran: Toy) -> None:
