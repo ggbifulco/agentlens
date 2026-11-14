@@ -347,3 +347,23 @@ Append-only log of development sessions (newest at the bottom).
   notes, README example (verified).
 - No new dependencies. 1174 tests, 100% coverage.
 - Next: #20 YAML suite and dataset loader (M4).
+
+## 2026-11-14 — #20 YAML suite and dataset loader
+- Added `agentlens.suite`: `Suite` model (`name`, `agent` import path or callable, `model`,
+  `repetitions`, `concurrency`, `timeout_s`, `imports`, `metadata`, `defaults` = `SuiteDefaults`
+  (`evaluators`, `tags`), `cases`), `load_suite(path, registry=None, check=True)`,
+  `load_cases(path)` for `.jsonl`/`.yaml`/`.yml`/`.json` datasets (also `cases: path` in a suite),
+  `resolve_agent`/`Suite.load_agent()` (`pkg.mod:callable`, `mod:Agent.run`; cwd and suite folder
+  appended to `sys.path`), `merge_evaluators`, `SuiteError`/`SuiteIssue`/`AgentImportError`.
+- Validation errors with line context: YAML composed once into nodes whose marks are recorded by
+  path, so every problem (schema, duplicate keys/ids, unknown evaluator with "did you mean",
+  bad params, failing `imports`) is reported together as `file:line:col: cases[0].evaluators[1]:
+  message`, also inside external datasets.
+- Defaults merged into cases by `Suite.resolved_cases()`: defaults first; a case evaluator replaces
+  defaults of the same name; tags de-duplicated.
+- For #21: `Suite.content_hash()` (sha256 of canonical JSON of what runs, resolved cases),
+  `is_async_agent` / `Suite.agent_is_async()`.
+- Docs: README "Suites" section (verified), design §6 implementation notes.
+- No new dependencies (PyYAML already required). 1295 tests, 100% coverage.
+- Next: #21 Suite runner (repetitions, bounded asyncio concurrency, experiment persistence,
+  baseline mark).
