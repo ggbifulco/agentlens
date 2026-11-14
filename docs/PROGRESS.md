@@ -479,4 +479,4 @@ Append-only log of development sessions (newest at the bottom).
   assertion-rewrite hook (now applied to the package because it ships a pytest11 entry point).
 - Docs: README "pytest plugin" (verified), design §6 implementation notes. No new dependencies.
 - 1579 tests, 100% coverage.
-- Next: #26 (M5).
+- Next: #26 Terminal report (rich).
