@@ -42,7 +42,8 @@ src/agentlens/
   compare/       # Per-case diff, aggregate stats, bootstrap, gates
   report/        # Report models + renderers: plain text, rich terminal, JSON, Markdown, HTML (Jinja2 templates)
   integrations/  # pytest plugin, GitHub PR comments, (optional) OpenTelemetry exporter, framework hooks
-  cli/           # Typer CLI entrypoint (`agentlens`): run, compare, report, baseline, traces, github, ...
+  cli/           # Typer CLI entrypoint (`agentlens`): run, compare, report, baseline, traces, github, ui, ...
+  ui/            # Local read-only web UI (`agentlens ui`): stdlib HTTP server, pages reuse report/ templates + JSON API
 examples/
   ci_demo/       # Tiny deterministic MockLLM agent + suite + gates run by this repo's CI
   support_agent/ # Demo tool-using agent + golden dataset + regression story

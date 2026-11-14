@@ -17,7 +17,8 @@ AgentLens turns agent runs into a **statistically sound regression suite** that 
 - 🔁 **Replay** deterministically from cassettes, or live against a new model/prompt.
 - ⚖️ **Evaluate** with deterministic checks (tool sequence, JSON schema, budgets) and LLM-as-judge.
 - 📊 **Compare** experiments with paired-bootstrap confidence intervals, not just averages.
-- 🚦 **Gate** PRs in CI and post a report as a PR comment; browse traces in a self-contained HTML report.
+- 🚦 **Gate** PRs in CI and post a report as a PR comment; browse traces in a self-contained HTML report
+  or a local web UI (`agentlens ui`).
 - 🔌 **Swappable models**: mock, OpenAI-compatible (OpenAI, Ollama, vLLM), Anthropic.
 - 🔭 **OpenTelemetry export** with the GenAI semantic conventions (`agentlens[otel]`).
 
@@ -525,6 +526,7 @@ $ agentlens export traces.jsonl --experiment pr-123 && agentlens import traces.j
 | `github comment --file REPORT.md [--marker KEY --pr N --repo OWNER/REPO]` | Posts the report on a pull request, or updates the comment carrying the marker (token in `$GITHUB_TOKEN`). |
 | `baseline set\|unset EXPERIMENT`, `baseline show [SUITE]` | Manage the per-suite baseline. |
 | `experiments ls`, `traces ls`, `traces show ID` | Browse the database. |
+| `ui [--host --port --db --gates --open/--no-open]` | The [local web UI](#local-web-ui) on `http://127.0.0.1:8765/`. |
 | `export PATH`, `import PATH` | JSONL interchange (filters `--name/--experiment/--limit`; `import --experiment`). |
 
 **Output:** on an interactive terminal `run`, `compare` and `report` print the **rich report**:
@@ -585,6 +587,33 @@ open("report.html", "w", encoding="utf-8").write(html)
 The screenshots come from `scripts/html_report_demo.py` (the `examples/ci_demo` suite run twice,
 the second time with a broken answer and an extra step) and `scripts/screenshot_html_report.py`
 (Playwright).
+
+### Local web UI
+`agentlens ui` serves a small **read-only** web UI over the database on
+`http://127.0.0.1:8765/` (and opens it in your browser; `--no-open`, `--port`, `--host`, `--db`):
+
+- **Traces**: filter by name, experiment, case, metadata (`key=value`) or *errors only*, page
+  through them; each row shows pass/fail (with the failed evaluators), latency, cost, steps,
+  tokens and the output. A trace opens on its **span tree** (the HTML report's viewer).
+- **Experiments**: every run of every suite, the baseline marked; pick a baseline and a candidate
+  (or *vs baseline*) for the **comparison**: metrics with confidence intervals, gates
+  (`agentlens ui --gates gates.yaml`) and every case side by side. An experiment opens on its report.
+- **JSON API** with the same data: `/api/traces?experiment=pr-123&errors=1&limit=20`,
+  `/api/traces/ID`, `/api/experiments`, `/api/experiments/ID`, `/api/compare?baseline=&candidate=`.
+
+```bash
+agentlens run examples/support_agent/suite.yaml --name main --set-baseline
+SUPPORT_PROMPT_VERSION=v2 agentlens run examples/support_agent/suite.yaml --name prompt-v2
+agentlens ui --gates examples/support_agent/gates.yaml
+```
+
+![Web UI: the candidate's traces, a regressed run flagged](docs/images/web-ui.png)
+![Web UI: the regressed run's span tree, the refund call over the limit selected](docs/images/web-ui-trace.png)
+
+It runs on the standard library's HTTP server (no extra dependency, no JavaScript framework,
+nothing loaded from the network), listens on loopback only unless you pass `--host`, answers
+only `GET`, and escapes everything it shows. From Python:
+`agentlens.ui.serve(agentlens.ui.make_server(agentlens.ui.UIApp("runs.db"), port=0))`.
 
 ## GitHub Action
 `action.yml` at the root of this repository is a composite action that checks every pull request
