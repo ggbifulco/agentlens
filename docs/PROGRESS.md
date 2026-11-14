@@ -435,3 +435,26 @@ Append-only log of development sessions (newest at the bottom).
   `tests/compare/helpers.py`.
 - No new dependencies. 1450 tests, 100% coverage.
 - Next: #24 CLI: run / compare / report / baseline / traces (Typer).
+
+## 2026-11-14 — #24 CLI: run / compare / report / baseline / traces (Typer)
+- Added the `agentlens` command (`agentlens.cli:app`, also `python -m agentlens`): `run SUITE`
+  (`--name/--model/--repetitions/--concurrency/--timeout`, progress on stderr, `--gates` absolute
+  rules, `--set-baseline` unless a gate failed), `compare --candidate X [--baseline Y|baseline]`
+  (`--gates`, `--resamples`, `--seed`, `--confidence`, `--json PATH|-`), `report EXPERIMENT|FILE
+  [--format text|json] [-o]`, `baseline set|unset|show`, `experiments ls`, `traces ls|show`,
+  `export`/`import` (JSONL). Global `--db` / `$AGENTLENS_DB` (read commands require an existing
+  db) and `--version`.
+- Exit codes: 0 ok, 1 gate failed, 2 usage/config error (`SuiteError`/`GatesError` with
+  positions, unknown experiment/trace, store/JSONL/report errors, unreadable files, corrupt db).
+- `compare` loads runs once: delta/count gates on the paired cases, absolute gates on all
+  candidate cases (same values as `run --gates`).
+- Added `agentlens.report`: `ExperimentReport.from_runs`, `ComparisonReport`, `load_report`,
+  `render(report, fmt)` with a `ReportFormat` registry (`register_renderer`); plain text and JSON
+  now, markdown/html reserved for #27/#28 (exit 2 naming the issue), rich view for #26.
+- New runtime dependency: `typer` (vendors Click; brings `rich`, `shellingham`). Rich pretty
+  tracebacks disabled (they can print locals such as API keys).
+- Tests with `typer.testing.CliRunner` against a tmp SQLite db and a MockLLM toy agent written
+  into `tmp_path`. Docs: README "Command line" (verified), design §8 implementation notes,
+  architecture package layout.
+- 1553 tests, 100% coverage.
+- Next: #25 pytest plugin for suites.
