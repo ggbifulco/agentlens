@@ -1,9 +1,10 @@
 """Report formats and the renderer registry.
 
-A renderer turns a report model into text. ``text`` and ``json`` are built in;
-``markdown`` and ``html`` are reserved for the reporters of #27 and #28, which
-plug in with :func:`register_renderer` (the rich terminal report of #26 will
-do the same), so the CLI's ``agentlens report --format`` needs no change.
+A renderer turns a report model into text. ``text``, ``rich`` (the coloured
+terminal report) and ``json`` are built in; ``markdown`` and ``html`` are
+reserved for the reporters of #27 and #28, which plug in with
+:func:`register_renderer`, so the CLI's ``agentlens report --format`` needs no
+change.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from typing import Protocol
 
 from agentlens.report.model import ComparisonReport, ExperimentReport
 from agentlens.report.plain import JSONRenderer, PlainTextRenderer
+from agentlens.report.terminal import RichRenderer
 
 __all__ = [
     "Renderer",
@@ -29,6 +31,8 @@ class ReportFormat(StrEnum):
     """Output formats of ``agentlens report``."""
 
     TEXT = "text"
+    RICH = "rich"
+    """Coloured tables for a terminal (:class:`~agentlens.report.RichRenderer`)."""
     JSON = "json"
     MARKDOWN = "markdown"
     HTML = "html"
@@ -57,6 +61,7 @@ _PLANNED = {
 
 _RENDERERS: dict[ReportFormat, Renderer] = {
     ReportFormat.TEXT: PlainTextRenderer(),
+    ReportFormat.RICH: RichRenderer(),
     ReportFormat.JSON: JSONRenderer(),
 }
 
