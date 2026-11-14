@@ -62,6 +62,11 @@ def test_version(toy: Toy) -> None:
 
 def test_python_dash_m(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(sys, "argv", ["agentlens", "--version"])
+    # agentlens ships a pytest plugin, so pytest marks the package for assertion rewriting
+    # and its import hook (which has no get_code(), needed by runpy) would load __main__.
+    monkeypatch.setattr(
+        sys, "meta_path", [f for f in sys.meta_path if type(f).__name__ != "AssertionRewritingHook"]
+    )
     with pytest.raises(SystemExit) as info:
         runpy.run_module("agentlens", run_name="__main__")
     assert info.value.code == 0
