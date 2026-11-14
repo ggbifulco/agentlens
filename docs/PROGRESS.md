@@ -458,3 +458,25 @@ Append-only log of development sessions (newest at the bottom).
   architecture package layout.
 - 1553 tests, 100% coverage.
 - Next: #25 pytest plugin for suites.
+
+## 2026-11-14 — #25 pytest plugin for suites
+- Added `agentlens.integrations.pytest_plugin`, registered as entry point
+  `pytest11: agentlens` (inert unless used: only options + fixture; runner/store imported lazily).
+- `pytest --agentlens SUITE` (repeatable) collects one item per case, node id
+  `<suite file>::<case_id>` (header `agentlens <suite>::<case_id>`), next to normal tests;
+  `-k` matches case id, suite name and tags; node ids narrow the selection. The selected cases
+  of a suite run once as one experiment (suite concurrency); a case passes when every repetition
+  passed. Failures show input/expected and, per failing repetition, the error or output and each
+  failed evaluator as `name: score S: reason` (no traceback). Invalid suites are collection
+  errors with `file:line:column` issues; an agent that cannot be imported fails every case.
+- `--agentlens-repetitions N`, `--agentlens-db PATH` (experiments saved for `compare`/`report`),
+  junit properties `agentlens_experiment`, `agentlens_pass_rate`, `agentlens_score.<name>`.
+- Fixture `agentlens_run(agent, case, *, evaluators, repetitions, model, timeout_s) -> CaseResult`
+  plus `assert_passed(result)` / `format_case_result(result)` (`CaseFailedError`, an
+  `AssertionError`).
+- This repo's own run uses `-p no:agentlens` (an auto-loaded plugin imports `agentlens` before
+  coverage starts); plugin tests use `pytester`. The `python -m agentlens` test drops pytest's
+  assertion-rewrite hook (now applied to the package because it ships a pytest11 entry point).
+- Docs: README "pytest plugin" (verified), design §6 implementation notes. No new dependencies.
+- 1579 tests, 100% coverage.
+- Next: #26 (M5).
