@@ -133,9 +133,14 @@ def test_json_format_round_trips() -> None:
 
 
 def test_planned_formats_are_not_available_yet() -> None:
-    assert available_formats() == [ReportFormat.TEXT, ReportFormat.RICH, ReportFormat.JSON]
-    with pytest.raises(ReportFormatUnavailableError, match=r"Markdown report \(#27\)"):
-        get_renderer("markdown")
+    assert available_formats() == [
+        ReportFormat.TEXT,
+        ReportFormat.RICH,
+        ReportFormat.JSON,
+        ReportFormat.MARKDOWN,
+    ]
+    with pytest.raises(ReportFormatUnavailableError, match=r"HTML report \(#28\)"):
+        get_renderer("html")
     with pytest.raises(ValueError, match="pdf"):
         get_renderer("pdf")
 
