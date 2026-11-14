@@ -34,3 +34,11 @@ def clean_default_registry() -> Iterator[EvaluatorRegistry]:
     finally:
         default_registry._entries.clear()
         default_registry._entries.update(saved)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_judge_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No judge model from the developer's shell, and no default on-disk judge cache."""
+    monkeypatch.delenv("AGENTLENS_JUDGE_MODEL", raising=False)
+    monkeypatch.delenv("AGENTLENS_MODEL", raising=False)
+    monkeypatch.setenv("AGENTLENS_JUDGE_CACHE", "off")
