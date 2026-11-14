@@ -375,9 +375,8 @@ def test_report_saved_comparison(ran: Toy) -> None:
     assert "candidate  pr-1 (" in result.stdout
 
 
-@pytest.mark.parametrize("fmt", ["markdown", "html"])
-def test_report_planned_formats(ran: Toy, fmt: str) -> None:
-    result = ran("report", "pr-1", "--format", fmt)
+def test_report_planned_formats(ran: Toy) -> None:
+    result = ran("report", "pr-1", "--format", "html")
     assert result.exit_code == EXIT_USAGE
     assert "not available yet" in result.stderr
     assert "#2" in result.stderr
@@ -478,3 +477,70 @@ def test_run_and_compare_are_rich_on_a_terminal(ran: Toy) -> None:
     assert "✓ all" not in run_result.stdout  # "x" fails in the baseline suite
     assert "Failures (1 of 6 cases)" in run_result.stdout
     assert "saved experiment" in run_result.stdout
+
+
+# -- run --json / report --format markdown -------------------------------------------
+
+
+def test_run_writes_json_with_gates(toy: Toy) -> None:
+    gates = toy.write("gates.yaml", "success_rate: {min: 0.5}\n")
+    out = toy.root / "reports" / "run.json"
+    result = toy("run", str(toy.suite), "-n", "main", "-g", str(gates), "-q", "--json", str(out))
+    assert result.exit_code == EXIT_OK
+    assert "experiment  main (" in result.stdout
+    report = load_report(out)
+    assert isinstance(report, ExperimentReport)
+    assert report.gates is not None
+    assert report.gates.passed
+
+
+def test_run_json_to_stdout(toy: Toy) -> None:
+    result = toy("run", str(toy.suite), "-n", "main", "--set-baseline", "-q", "--json", "-")
+    assert result.exit_code == EXIT_OK
+    report = ExperimentReport.model_validate_json(result.stdout)
+    assert report.experiment.is_baseline
+    assert "saved experiment 'main'" in result.stderr
+    assert "marked as the baseline" in result.stderr
+
+
+def test_run_unwritable_json(toy: Toy) -> None:
+    (toy.root / "file").write_text("")
+    result = toy("run", str(toy.suite), "-q", "--json", "file/sub/run.json")
+    assert result.exit_code == EXIT_USAGE
+
+
+def test_report_markdown_comparison_with_marker(ran: Toy) -> None:
+    gates = ran.write("gates.yaml", "case_regressions: {max: 0}\n")
+    cmp = ran.root / "cmp.json"
+    compared = ran(
+        "compare", "-c", "pr-1", "-g", str(gates), "--resamples", "20", "--json", str(cmp)
+    )
+    assert compared.exit_code == EXIT_GATE_FAILED
+    out = ran.root / "report.md"
+    result = ran(
+        "report", str(cmp), "--format", "markdown", "--marker", "agentlens:toy", "-o", str(out)
+    )
+    assert result.exit_code == EXIT_OK
+    text = out.read_text(encoding="utf-8")
+    assert text.startswith("<!-- agentlens:toy -->\n### ❌ AgentLens: gates failed")
+    assert "<details><summary>Case regressions (2)</summary>" in text
+    assert "| ❌ **fail** | case_regressions |" in text
+
+
+def test_report_markdown_experiment_default_marker(ran: Toy) -> None:
+    result = ran("report", "main", "--format", "markdown")
+    assert result.exit_code == EXIT_OK
+    assert result.stdout.startswith("<!-- agentlens-report -->\n### ❌ AgentLens:")
+    assert "Failing cases (1 of 6)" in result.stdout
+
+
+def test_report_marker_needs_markdown(ran: Toy) -> None:
+    result = ran("report", "main", "--format", "text", "--marker", "x")
+    assert result.exit_code == EXIT_USAGE
+    assert "only applies to --format markdown" in plain(result.stderr)
+
+
+def test_report_invalid_marker(ran: Toy) -> None:
+    result = ran("report", "main", "--format", "markdown", "--marker", "a -->")
+    assert result.exit_code == EXIT_USAGE
+    assert "invalid marker" in plain(result.stderr)

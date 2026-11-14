@@ -503,3 +503,28 @@ Append-only log of development sessions (newest at the bottom).
   design §8 implementation notes, architecture.
 - 1607 tests, 100% coverage.
 - Next: #27 Markdown report and GitHub Action posting PR comment.
+
+## 2026-11-14 — #27 Markdown report and GitHub Action posting PR comment
+- Added the `markdown` report format (`MarkdownRenderer(marker=, max_cases=)`, registered;
+  `marker_comment`, `DEFAULT_MARKER`): verdict headline with ✅/❌ plus words, context line,
+  metrics table (baseline, candidate, Δ, Δ%, 95% CI, status), gates table with notes, case
+  regressions/improvements in collapsed `<details>`, footer with experiment names/ids/git shas;
+  first line is the hidden `<!-- agentlens-report -->` marker. User text escaped; case lists
+  capped at 50. Snapshot-tested (`tests/report/snapshots/{comparison,experiment}.md`).
+- Added `agentlens.integrations.github`: `upsert_pr_comment(body, *, context, marker, client)`
+  (list comments with pagination, PATCH the one with the marker, else POST; `unchanged` when
+  identical), `GitHubContext.from_env` (GITHUB_TOKEN/GITHUB_REPOSITORY/GITHUB_EVENT_PATH/
+  GITHUB_API_URL), `GitHubError`, `with_marker`; plain httpx, tested with respx.
+- CLI: `agentlens github comment --file F [--marker --pr --repo]`, `run --json PATH|-` (report
+  with gate verdict), `report --format markdown --marker KEY`.
+- Composite action `action.yml`: setup-uv, venv with AgentLens (action source or
+  `agentlens-version`) + `install` args, baseline = PR base commit run in a temporary git
+  worktree (ADR 0006; or a stored baseline with `baseline-ref: ""`), candidate run, compare with
+  gates → Markdown (also to the step summary) → PR comment (warning on failure, e.g. forks) →
+  exit with the gate code. Outputs: passed, exit-code, report-path, json-path, experiments.
+- Demo: `examples/ci_demo` (MockLLM FAQ agent, 12 cases, gates) run by
+  `.github/workflows/agentlens.yml` on pull requests (`pull-requests: write`).
+- Docs: README "GitHub Action", design §8 implementation notes, architecture data flow, ADR 0006.
+  No new dependencies.
+- 1665 tests, 100% coverage.
+- Next: #28 HTML report.

@@ -40,11 +40,13 @@ src/agentlens/
   evals/         # Evaluator protocol, deterministic evaluators, judges, registry
   suite/         # Dataset loading (YAML), runner, experiments, baselines
   compare/       # Per-case diff, aggregate stats, bootstrap, gates
-  report/        # Report models + renderers: plain text, rich terminal, JSON; HTML, Markdown later
-  integrations/  # pytest plugin, (optional) OpenTelemetry exporter, framework hooks
-  cli/           # Typer CLI entrypoint (`agentlens`): run, compare, report, baseline, traces, ...
+  report/        # Report models + renderers: plain text, rich terminal, JSON, Markdown; HTML later
+  integrations/  # pytest plugin, GitHub PR comments, (optional) OpenTelemetry exporter, framework hooks
+  cli/           # Typer CLI entrypoint (`agentlens`): run, compare, report, baseline, traces, github, ...
 examples/
+  ci_demo/       # Tiny deterministic MockLLM agent + suite + gates run by this repo's CI
   support_agent/ # Demo tool-using agent + golden dataset + regression story
+action.yml       # Composite GitHub Action: baseline vs PR run, PR comment, gate exit code
 ```
 
 ## Key design decisions
@@ -57,15 +59,21 @@ See `docs/adr/`. Summary:
 | 0003 | SQLite as default store, JSONL as interchange format |
 | 0004 | Cassette-style replay keyed by call order + request hash |
 | 0005 | Bootstrap confidence intervals for regression detection |
+| 0006 | CI baseline: re-run the suite on the PR's base commit in the same job |
 
 ## Data flow: a CI regression check
 
-1. PR opened → GitHub Action runs `agentlens run suites/support.yaml --name pr-123`.
+1. PR opened → the GitHub Action (`action.yml`) checks out the PR's base commit in a temporary
+   worktree and runs `agentlens run suites/support.yaml --name baseline-<sha>` there (ADR 0006;
+   alternatively a stored baseline restored from a cache), then
+   `agentlens run suites/support.yaml --name pr-123` on the PR.
 2. Runner loads dataset, runs agent per case × N repetitions; SDK records traces into the store.
 3. Evaluators score each trace (deterministic first, judges only if needed, judge results cached).
-4. `agentlens compare --baseline main --candidate pr-123 --gates gates.yaml`.
+4. `agentlens compare --baseline baseline-<sha> --candidate pr-123 --gates gates.yaml --json r.json`.
 5. Comparator computes per-metric deltas + bootstrap CI, evaluates gates.
-6. Markdown reporter posts PR comment; exit code 1 if a gate fails.
+6. `agentlens report r.json --format markdown` → `agentlens github comment` creates or updates the
+   PR comment carrying the `<!-- agentlens-report -->` marker; then the job exits 1 if a gate
+   failed.
 
 ## Extension points
 - `Evaluator` protocol / `@evaluator` decorator.

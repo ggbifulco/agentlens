@@ -1,7 +1,7 @@
 """What a report shows: an experiment's results or a comparison, plus gate verdicts.
 
 These models are the input of every renderer (plain text and JSON today, the
-rich terminal report, Markdown and HTML later), so a report can be rendered
+rich terminal report, Markdown; HTML later), so a report can be rendered
 from a live run, from the store, or from a JSON file written earlier
 (``agentlens compare --json``).
 """

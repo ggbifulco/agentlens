@@ -14,11 +14,17 @@ its gate verdict; :func:`load_report` reads either kind back from JSON.
 
 Formats available today are plain ``text``, ``rich`` (coloured tables for a
 terminal: ``render(report, "rich")``, or print :func:`comparison_renderable` /
-:func:`experiment_renderable` to a ``rich`` console) and ``json``.
-``markdown`` (#27) and ``html`` (#28) register their renderers with
-:func:`register_renderer`.
+:func:`experiment_renderable` to a ``rich`` console), ``json`` and
+``markdown`` (GitHub-flavoured, for PR comments: :class:`MarkdownRenderer`,
+starting with the hidden :func:`marker_comment`). ``html`` (#28) registers its
+renderer with :func:`register_renderer`.
 """
 
+from agentlens.report.markdown import (
+    DEFAULT_MARKER,
+    MarkdownRenderer,
+    marker_comment,
+)
 from agentlens.report.model import (
     CaseSummary,
     ComparisonReport,
@@ -43,10 +49,12 @@ from agentlens.report.terminal import (
 )
 
 __all__ = [
+    "DEFAULT_MARKER",
     "CaseSummary",
     "ComparisonReport",
     "ExperimentReport",
     "JSONRenderer",
+    "MarkdownRenderer",
     "PlainTextRenderer",
     "Renderer",
     "ReportError",
@@ -59,6 +67,7 @@ __all__ = [
     "fmt_value",
     "get_renderer",
     "load_report",
+    "marker_comment",
     "register_renderer",
     "render",
     "table",

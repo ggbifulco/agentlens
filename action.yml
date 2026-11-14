@@ -1,0 +1,236 @@
+name: AgentLens regression check
+description: >-
+  Run an AgentLens suite on a pull request, compare it with a baseline (by default the
+  PR's base commit, run in the same job), post or update the report as a PR comment and
+  fail the job when a gate fails.
+author: Giuseppe Bifulco
+branding:
+  icon: activity
+  color: blue
+
+inputs:
+  suite:
+    description: Suite YAML file, relative to working-directory.
+    required: true
+  gates:
+    description: Gates YAML file, relative to working-directory (empty = no gates; the job then never fails on results).
+    required: false
+    default: ""
+  baseline-ref:
+    description: >-
+      Git commit or ref whose code is run as the baseline in this job, from a temporary
+      worktree (default: the pull request's base commit). Set it to an empty string to
+      compare against `baseline` from the database instead (restored from a cache or an
+      artifact). If the suite file does not exist at this ref (a new suite), there is no
+      baseline: only absolute gates (min/max) are checked.
+    required: false
+    default: ${{ github.event.pull_request.base.sha }}
+  baseline:
+    description: >-
+      Used when baseline-ref is empty: the experiment to compare with (id, name, or
+      `baseline` for the suite's marked baseline) in the database.
+    required: false
+    default: baseline
+  candidate-name:
+    description: Name of the candidate experiment (default pr-<number>, or the commit sha outside pull requests).
+    required: false
+    default: ""
+  working-directory:
+    description: Directory the suite runs from (its agent module is imported from here or next to the suite).
+    required: false
+    default: "."
+  db:
+    description: SQLite database, relative to working-directory. Keep it (actions/cache, upload-artifact) to compare with stored baselines.
+    required: false
+    default: .agentlens/agentlens.db
+  python-version:
+    description: Python version for AgentLens and the agent.
+    required: false
+    default: "3.12"
+  agentlens-version:
+    description: AgentLens version to install from PyPI (empty = install the action's own source, i.e. the version pinned by the action ref).
+    required: false
+    default: ""
+  install:
+    description: Extra `uv pip install` arguments for the agent's own dependencies, run in working-directory (e.g. "-e ." or "-r requirements.txt").
+    required: false
+    default: ""
+  comment:
+    description: Post or update the report as a pull-request comment ("true"/"false").
+    required: false
+    default: "true"
+  github-token:
+    description: "Token used to comment; needs `pull-requests: write`."
+    required: false
+    default: ${{ github.token }}
+  marker:
+    description: Key of the hidden <!-- KEY --> marker identifying the comment to update; use a distinct one per suite when a PR runs several.
+    required: false
+    default: agentlens-report
+
+outputs:
+  passed:
+    description: '"true" if every gate passed (or there were no gates), else "false".'
+    value: ${{ steps.check.outputs.passed }}
+  exit-code:
+    description: The gate exit code (0 passed, 1 a gate failed).
+    value: ${{ steps.check.outputs.exit-code }}
+  report-path:
+    description: Path of the Markdown report.
+    value: ${{ steps.check.outputs.report-path }}
+  json-path:
+    description: Path of the JSON report (`agentlens report FILE` re-renders it).
+    value: ${{ steps.check.outputs.json-path }}
+  baseline-experiment:
+    description: Name of the baseline experiment ("" when there was none).
+    value: ${{ steps.check.outputs.baseline-experiment }}
+  candidate-experiment:
+    description: Name of the candidate experiment.
+    value: ${{ steps.check.outputs.candidate-experiment }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v6
+
+    - name: Install AgentLens
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PYTHON_VERSION: ${{ inputs.python-version }}
+        AGENTLENS_VERSION: ${{ inputs.agentlens-version }}
+        ACTION_PATH: ${{ github.action_path }}
+        EXTRA_INSTALL: ${{ inputs.install }}
+      run: |
+        set -euo pipefail
+        venv="$RUNNER_TEMP/agentlens-venv"
+        uv venv --quiet --python "$PYTHON_VERSION" "$venv"
+        export VIRTUAL_ENV="$venv"
+        if [ -n "$AGENTLENS_VERSION" ]; then
+          uv pip install --quiet "agentlens==$AGENTLENS_VERSION"
+        else
+          uv pip install --quiet "$ACTION_PATH"
+        fi
+        if [ -n "$EXTRA_INSTALL" ]; then
+          # Word splitting is intended: the input holds pip arguments.
+          # shellcheck disable=SC2086
+          uv pip install --quiet $EXTRA_INSTALL
+        fi
+        echo "$venv/bin" >> "$GITHUB_PATH"
+        "$venv/bin/agentlens" --version
+
+    - name: Run suite and compare
+      id: check
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SUITE: ${{ inputs.suite }}
+        GATES: ${{ inputs.gates }}
+        BASELINE_REF: ${{ inputs.baseline-ref }}
+        BASELINE: ${{ inputs.baseline }}
+        CANDIDATE_NAME: ${{ inputs.candidate-name }}
+        DB: ${{ inputs.db }}
+        MARKER: ${{ inputs.marker }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        NO_COLOR: "1"
+      run: |
+        set -uo pipefail
+        out="$RUNNER_TEMP/agentlens"
+        mkdir -p "$out"
+        here="$PWD"
+        db="$(realpath -m "$DB")"
+        mkdir -p "$(dirname "$db")"
+        candidate="${CANDIDATE_NAME:-}"
+        if [ -z "$candidate" ]; then
+          if [ -n "$PR_NUMBER" ]; then candidate="pr-$PR_NUMBER"; else candidate="${GITHUB_SHA::12}"; fi
+        fi
+        gates=()
+        if [ -n "$GATES" ]; then gates=(--gates "$(realpath "$GATES")"); fi
+
+        # 1. Baseline: the base commit's code, run now in a temporary worktree...
+        baseline=""
+        if [ -n "$BASELINE_REF" ]; then
+          if ! git cat-file -e "$BASELINE_REF^{commit}" 2>/dev/null; then
+            git fetch --quiet --no-tags --depth=1 origin "$BASELINE_REF" || exit 2
+          fi
+          sha="$(git rev-parse "$BASELINE_REF^{commit}")" || exit 2
+          root="$(git rev-parse --show-toplevel)"
+          rel="$(realpath --relative-to="$root" "$here")"
+          worktree="$RUNNER_TEMP/agentlens-baseline"
+          git worktree add --quiet --detach "$worktree" "$sha" || exit 2
+          if [ -f "$worktree/$rel/$SUITE" ]; then
+            baseline="baseline-${sha::12}"
+            echo "::group::Baseline: $SUITE at ${sha::12}"
+            (cd "$worktree/$rel" && agentlens --db "$db" run "$SUITE" --name "$baseline" -q)
+            code=$?
+            echo "::endgroup::"
+            if [ "$code" -ne 0 ]; then
+              echo "::error::the baseline run at ${sha::12} failed (exit $code)"
+              git worktree remove --force "$worktree"
+              exit "$code"
+            fi
+          else
+            echo "::notice::$SUITE does not exist at ${sha::12}: no baseline, only absolute gates are checked"
+          fi
+          git worktree remove --force "$worktree"
+        # ...or an experiment stored in the database (restored from a cache or an artifact).
+        elif [ -f "$db" ]; then
+          baseline="$BASELINE"
+        else
+          echo "::notice::no database at $DB: no baseline, only absolute gates are checked"
+        fi
+
+        # 2. Candidate: this commit's code, then the comparison (gates decide the exit code).
+        echo "::group::Candidate: $SUITE as $candidate"
+        if [ -n "$baseline" ]; then
+          agentlens --db "$db" run "$SUITE" --name "$candidate" -q
+          code=$?
+          if [ "$code" -eq 0 ]; then
+            agentlens --db "$db" compare --baseline "$baseline" --candidate "$candidate" \
+              "${gates[@]}" --json "$out/report.json"
+            code=$?
+          fi
+        else
+          agentlens --db "$db" run "$SUITE" --name "$candidate" -q "${gates[@]}" \
+            --json "$out/report.json"
+          code=$?
+        fi
+        echo "::endgroup::"
+        if [ "$code" -gt 1 ]; then
+          echo "::error::agentlens failed (exit $code): see the log above"
+          exit "$code"
+        fi
+
+        # 3. The Markdown report, also shown on the run's summary page.
+        agentlens report "$out/report.json" --format markdown --marker "$MARKER" \
+          -o "$out/report.md" || exit 2
+        cat "$out/report.md" >> "$GITHUB_STEP_SUMMARY"
+        {
+          echo "exit-code=$code"
+          if [ "$code" -eq 0 ]; then echo "passed=true"; else echo "passed=false"; fi
+          echo "report-path=$out/report.md"
+          echo "json-path=$out/report.json"
+          echo "baseline-experiment=$baseline"
+          echo "candidate-experiment=$candidate"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Comment on the pull request
+      if: inputs.comment == 'true' && github.event.pull_request.number != ''
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        REPORT: ${{ steps.check.outputs.report-path }}
+        MARKER: ${{ inputs.marker }}
+      run: |
+        agentlens github comment --file "$REPORT" --marker "$MARKER" \
+          || echo "::warning::could not post the AgentLens comment (pull requests from forks get a read-only token); the report is on the run's summary page"
+
+    - name: Fail if a gate failed
+      if: steps.check.outputs.exit-code != '0'
+      shell: bash
+      env:
+        CODE: ${{ steps.check.outputs.exit-code }}
+      run: |
+        echo "::error::AgentLens: a gate failed (see the report)"
+        exit "$CODE"
