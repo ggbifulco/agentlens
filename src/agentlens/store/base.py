@@ -55,12 +55,17 @@ class Store(Protocol):
         name: str | None = None,
         experiment_id: str | None = None,
         metadata: Mapping[str, MetadataScalar] | None = None,
+        has_error: bool | None = None,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[Trace]:
         """Stored traces matching *all* given filters, most recent first.
 
         ``metadata`` matches traces whose metadata has each key with exactly that
         scalar value (``{"case_id": "refund-simple", "repetition": 0}``).
+        ``has_error=True`` keeps the traces where the run or one of its spans
+        recorded an error (``False``: the others). ``offset`` skips that many
+        matches before ``limit`` applies (pagination).
         """
         ...
 

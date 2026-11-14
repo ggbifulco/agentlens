@@ -75,6 +75,55 @@ def test_negative_limit_is_rejected(store: SQLiteStore) -> None:
         store.list_traces(limit=-1)
 
 
+def test_offset_pages_through_the_list(store: SQLiteStore) -> None:
+    for m in range(5):
+        store.save_trace(make_trace(minute=m))
+    listed = store.list_traces()
+
+    assert store.list_traces(limit=2, offset=0) == listed[:2]
+    assert store.list_traces(limit=2, offset=2) == listed[2:4]
+    assert store.list_traces(limit=2, offset=4) == listed[4:]
+    assert store.list_traces(offset=3) == listed[3:]  # offset without limit
+    assert store.list_traces(limit=2, offset=10) == []
+
+
+def test_negative_offset_is_rejected(store: SQLiteStore) -> None:
+    with pytest.raises(ValueError, match="offset"):
+        store.list_traces(offset=-1)
+
+
+def test_filter_by_error_on_the_run_or_a_span(store: SQLiteStore) -> None:
+    ok = make_trace("ok", minute=0)
+    run_error = make_trace("run", minute=1)
+    run_error.error = "ValueError: boom"
+    span_error = make_trace("span", minute=2)
+    span_error.spans = [
+        Span(
+            trace_id=span_error.id,
+            kind=SpanKind.TOOL_CALL,
+            name="lookup",
+            start_time=span_error.start_time,
+            error="KeyError: 'x'",
+        ),
+        Span(
+            trace_id=span_error.id,
+            kind=SpanKind.LLM_CALL,
+            name="llm",
+            start_time=span_error.start_time,
+        ),
+    ]
+    ok.spans = [
+        Span(trace_id=ok.id, kind=SpanKind.LLM_CALL, name="llm", start_time=ok.start_time)
+    ]
+    for t in (ok, run_error, span_error):
+        store.save_trace(t)
+
+    assert [t.name for t in store.list_traces(has_error=True)] == ["span", "run"]
+    assert [t.name for t in store.list_traces(has_error=False)] == ["ok"]
+    assert [t.name for t in store.list_traces(has_error=True, name="run")] == ["run"]
+    assert len(store.list_traces(has_error=None)) == 3
+
+
 def test_filter_by_name(store: SQLiteStore) -> None:
     a, b = make_trace("a"), make_trace("b")
     store.save_trace(a)
