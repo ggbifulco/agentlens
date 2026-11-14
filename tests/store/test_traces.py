@@ -112,9 +112,7 @@ def test_filter_by_error_on_the_run_or_a_span(store: SQLiteStore) -> None:
             start_time=span_error.start_time,
         ),
     ]
-    ok.spans = [
-        Span(trace_id=ok.id, kind=SpanKind.LLM_CALL, name="llm", start_time=ok.start_time)
-    ]
+    ok.spans = [Span(trace_id=ok.id, kind=SpanKind.LLM_CALL, name="llm", start_time=ok.start_time)]
     for t in (ok, run_error, span_error):
         store.save_trace(t)
 
