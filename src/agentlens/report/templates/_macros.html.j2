@@ -2,6 +2,15 @@
 <span class="pill st-{{ status }}">{{ label }}</span>
 {%- endmacro %}
 
+{% macro nav(items) -%}
+<nav class="nav" aria-label="AgentLens">
+  <a class="brand" href="/"><span class="logo" aria-hidden="true">&#9673;</span> AgentLens</a>
+{% for item in items %}
+  <a href="{{ item.href }}"{% if item.active %} class="active" aria-current="page"{% endif %}>{{ item.label }}</a>
+{% endfor %}
+</nav>
+{%- endmacro %}
+
 {% macro experiment_meta(role, exp) -%}
 <div class="meta-item">
   <dt>{{ role }}</dt>
