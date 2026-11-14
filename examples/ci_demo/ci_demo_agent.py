@@ -12,10 +12,13 @@ in a later release.
 
 from __future__ import annotations
 
+import re
+
 import agentlens
 from agentlens.llm import LLMRequest, Message, MockLLM
 
-FAQ: dict[str, str] = {
+# Keys typed like MockLLM's script (a Mapping's key type is invariant).
+FAQ: dict[str | re.Pattern[str], str] = {
     r"(?i)opening hours|open": "We are open 9:00-18:00, Monday to Saturday.",
     r"(?i)refund": "Refunds are issued within 14 days of purchase.",
     r"(?i)shipping|deliver": "Standard shipping takes 3-5 business days.",
