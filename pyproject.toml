@@ -1,20 +1,35 @@
 [project]
 name = "agentlens"
-dynamic = ["version"]
+dynamic = ["version", "readme"]
 description = "Regression testing and evaluation toolkit for LLM agents: record, replay, evaluate, compare."
-readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [{ name = "Giuseppe Bifulco" }]
-keywords = ["llm", "agents", "evaluation", "regression-testing", "tracing", "llm-as-judge"]
+keywords = [
+    "llm",
+    "agents",
+    "evaluation",
+    "evals",
+    "regression-testing",
+    "tracing",
+    "llm-as-judge",
+    "replay",
+    "pytest",
+    "opentelemetry",
+]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Framework :: Pytest",
     "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Quality Assurance",
     "Topic :: Software Development :: Testing",
     "Typing :: Typed",
 ]
@@ -41,7 +56,10 @@ otel = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ggbifulco/agentlens"
+Homepage = "https://ggbifulco.github.io/agentlens/"
+Documentation = "https://ggbifulco.github.io/agentlens/"
+Repository = "https://github.com/ggbifulco/agentlens"
+Changelog = "https://github.com/ggbifulco/agentlens/blob/main/CHANGELOG.md"
 Issues = "https://github.com/ggbifulco/agentlens/issues"
 
 [dependency-groups]
@@ -63,11 +81,27 @@ docs = [
 ]
 
 [build-system]
-requires = ["hatchling>=1.26"]
+requires = ["hatchling>=1.26", "hatch-fancy-pypi-readme>=24.1"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
 path = "src/agentlens/__init__.py"
+
+# PyPI long description = README.md with relative links made absolute (PyPI cannot resolve
+# repository paths): images point at raw files, every other path at the file on GitHub.
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '!\[([^\]]*)\]\((?!https?://)([^)]+)\)'
+replacement = '![\1](https://raw.githubusercontent.com/ggbifulco/agentlens/main/\2)'
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\]\((?!https?://|#)([^)]+)\)'
+replacement = '](https://github.com/ggbifulco/agentlens/blob/main/\1)'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentlens"]
