@@ -392,3 +392,25 @@ Append-only log of development sessions (newest at the bottom).
 - Docs: README "Running a suite" (verified), design §6 implementation notes.
 - No new dependencies. 1342 tests, 100% coverage.
 - Next: #22 Comparator with paired bootstrap confidence intervals.
+
+## 2026-11-14 — #22 Comparator with paired bootstrap confidence intervals
+- Added `agentlens.compare`: `compare_experiments(store, baseline, candidate, *, resamples=10_000,
+  seed=0, confidence=0.95) -> Comparison` (id, name or `Experiment`), `compare_runs` on in-memory
+  data (`ExperimentRun` or `RunResult`s), `experiment_runs(store, experiment)` (runs rebuilt from
+  `case_id`/`repetition` trace metadata + stored eval results).
+- Metrics per case (averaged over repetitions) and in aggregate: `pass_rate` (same rule as
+  `RunResult.passed`), `score.<evaluator>`, `cost_usd` (None-aware), `latency_ms`, `steps`.
+  Paired by case id over shared cases; `added_cases`/`removed_cases` reported.
+- `paired_bootstrap(diffs, *, resamples, confidence, seed)`: percentile CI, stdlib
+  `random.Random(seed)` (no NumPy; ~60 ms for 10k × 100 cases). `classify` by metric direction:
+  CI entirely on the bad side → regression, good side → improvement, else unchanged (`no_data`
+  without pairs).
+- Pydantic models `MetricDelta`, `CaseMetric`, `CaseComparison` (pass-rate status,
+  `regressed_evaluators`), `Comparison` (`metric()`, `case()`, `regressions`, `improvements`,
+  `case_regressions`, `case_improvements`, `has_regressions`), JSON round-trip for gates/reports.
+- Hypothesis properties: CI contains the observed mean, zero diffs → [0, 0], shift invariance,
+  same seed → same CI, CI within the data range.
+- Docs: README "Comparing experiments" (verified), design §7 implementation notes. Pairwise judge
+  integration left to the CLI/gates layer (noted in design §7).
+- No new dependencies. 1400 tests, 100% coverage.
+- Next: #23 Gates config and exit codes (YAML thresholds on top of `Comparison`).

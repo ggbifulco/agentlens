@@ -745,6 +745,57 @@ FR-S2/FR-S3):
   Regression = CI entirely below 0 for "higher is better" metrics.
 - Gates YAML: `success_rate: {min: 0.9}`, `cost_usd: {max_delta_pct: 20}`, `regressions: {max: 0}`.
 
+Implementation notes — comparator (`src/agentlens/compare/`, #22, FR-S4, ADR 0005):
+- **API**: `compare_experiments(store, baseline, candidate, *, resamples=10_000, seed=0,
+  confidence=0.95) -> Comparison` (each side an id, a name — most recent with that name, via
+  `find_experiment` — or an `Experiment`); `compare_runs(baseline, candidate, ...)` does the same on
+  in-memory data (`ExperimentRun` or any iterable of `RunResult`), so it is testable without a
+  store; `experiment_runs(store, experiment)` rebuilds `RunResult`s from stored traces (`case_id`
+  and `repetition` metadata written by the runner) plus `list_eval_results`. Traces without a
+  string `case_id` are skipped with a warning.
+- **Metrics** (names are what gates will reference): `pass_rate` (a run passes iff no error and all
+  its eval results passed — the same rule as `RunResult.passed`), `score.<evaluator>` (mean score),
+  `cost_usd`, `latency_ms`, `steps` (`Trace.n_steps`). Per case each is the mean over the case's
+  repetitions; `cost_usd`/`latency_ms` average only runs where the value is known (unknown cost is
+  not free), and a case where no run has one has no value for that metric.
+- **Pairing**: by case id over cases present in both experiments (others in `added_cases` /
+  `removed_cases`, never in a delta). For each metric the pairs are the shared cases where *both*
+  sides have a value; `n` says how many. `MetricDelta.baseline`/`candidate` are means over those
+  pairs, so `delta = candidate - baseline` is exactly the mean paired difference the CI is about;
+  `delta_pct = delta / |baseline| * 100` (`None` when the baseline is 0). No pairs → `no_data`.
+- **Bootstrap** (`paired_bootstrap(diffs, *, resamples, confidence, seed)`): percentile method over
+  resampled means, quantiles interpolated like NumPy's default `linear`. Stdlib only:
+  `random.Random(seed).choices(diffs, k=n)` per resample (10k × 100 cases ≈ 60 ms); no NumPy
+  dependency for one statistic. The indices drawn depend only on the seed, `n` and `resamples`,
+  never on the values, so the same seed is reproducible and shifting all diffs shifts the CI by
+  the same amount (property-tested with Hypothesis together with "zero diffs → [0, 0]", "CI
+  contains the observed mean", "CI within the data range"). Constant diffs short-circuit to a
+  point interval, and the interval is widened to contain the observed mean (only ever a
+  floating-point-rounding adjustment). Every metric uses the same seed. Alternatives rejected:
+  BCa intervals (more accurate on skewed data but harder to explain in a PR comment, and the
+  jackknife step is extra code), a t-test (assumes normal diffs; pass rates per case are bounded
+  and lumpy).
+- **Classification** (`classify(direction, ci_low, ci_high)`): higher-is-better metrics
+  (`pass_rate`, scores) regress when `ci_high < 0`; lower-is-better (`cost_usd`, `latency_ms`,
+  `steps`) when `ci_low > 0`; the mirror case is an improvement; a CI touching 0 is `unchanged`.
+  One case gives a point CI, so it can be flagged: the ~20-case guidance of ADR 0005 is the
+  user's (and gates', via `n`) responsibility.
+- **Per case** (`CaseComparison`): `metrics[name] = CaseMetric(baseline, candidate, delta)`,
+  `baseline_runs`/`candidate_runs`, `status` from the case's pass rate (any drop = `regression`,
+  e.g. passed in the baseline and fails in the candidate; any rise = `improvement`) and
+  `regressed_evaluators` (evaluators whose pass rate on that case dropped). This is a "where to
+  look" list; whether a change is beyond noise is what the aggregate CIs decide.
+- **`Comparison`** (pydantic, round-trips through `model_dump_json`/`model_validate_json`):
+  `baseline`/`candidate` experiments, `metrics` (`pass_rate`, `score.*` sorted, `cost_usd`,
+  `latency_ms`, `steps`), `cases` (baseline order), `added_cases`, `removed_cases`, `resamples`,
+  `confidence`, `seed`; helpers `metric(name)`, `case(id)`, `regressions`, `improvements`,
+  `case_regressions`, `case_improvements`, `has_regressions`. Gates (#23) and reporters (#26-#28)
+  consume it.
+- **Pairwise judge** (§5): not wired in yet. It needs the case and an LLM, so it belongs to the
+  CLI/gates layer (#23/#24), which can call `PairwiseJudge.compare` per shared case on one
+  baseline and one candidate trace (`experiment_runs` gives both) and add the results as a
+  `score.pairwise` metric.
+
 ## 8. CLI
 `agentlens run`, `agentlens compare`, `agentlens report`, `agentlens baseline set`,
 `agentlens traces ls/show`, `agentlens export/import`, `agentlens ui`.
