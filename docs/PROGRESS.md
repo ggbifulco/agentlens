@@ -528,3 +528,28 @@ Append-only log of development sessions (newest at the bottom).
   No new dependencies.
 - 1665 tests, 100% coverage.
 - Next: #28 HTML report.
+
+## 2026-11-14 — #28 Self-contained HTML report with trace viewer
+- Added the `html` report format: `HtmlRenderer(runs=, baseline_runs=, title=)` (registered
+  without runs) and `render_html(report, *, runs, baseline_runs, title)`. Report models are
+  unchanged; traces come from the runs passed alongside and are embedded as JSON.
+- One self-contained file (Jinja2 templates as package data in `report/templates/`, inline CSS
+  and JS, no network, light/dark via `prefers-color-scheme`): verdict, experiment metadata,
+  summary cards, metrics table with CI (text + CI-vs-0 bar) and status, gates with notes, cases
+  (regressions first, filter chips + search) opening to baseline/candidate runs side by side
+  (pass/fail, scores and reasons, cost, latency, steps, tokens, output, error).
+- Trace viewer: modal span tree built lazily from the JSON (kind badges, waterfall, collapse/
+  expand, span details with pretty-printed input/output/attributes, usage/cost, errors in red),
+  deep links `#trace-<id>`.
+- Escaping: Jinja autoescape; JSON in `<script type="application/json">` with `<`, `>`, `&`,
+  U+2028/9 as `\uXXXX`; JS writes only via `textContent`. Checked in Chromium with
+  `</script><script>alert(1)</script>` in every field.
+- CLI: `report EXP --format html [-o F]` (runs from the store), `report FILE.json --format html`
+  (traces looked up by experiment id when the database has them, else a note), `compare ...
+  --html F`.
+- New runtime dependency `jinja2>=3.1` (autoescaping templates). Screenshots
+  `docs/images/html-report{,-trace}.png` from `scripts/html_report_demo.py` +
+  `scripts/screenshot_html_report.py` (Playwright, not a dependency). Docs: README "HTML report",
+  design §8 implementation notes, architecture.
+- 1693 tests, 100% coverage.
+- Next: #29 Example support-desk agent with mock tools and golden dataset (M6).
