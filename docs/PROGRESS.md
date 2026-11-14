@@ -656,3 +656,27 @@ Append-only log of development sessions (newest at the bottom).
   proxy: **manual step** Settings → Pages → Source: GitHub Actions.
 - 7 new tests (`tests/docs/test_docs.py`). 1863 tests, 100% coverage.
 - Next: #34 release (v0.1.0 on PyPI).
+
+## 2026-11-14 — #34 Release v0.1.0 to PyPI (trusted publishing)
+- **Version 0.1.0** (`agentlens.__version__`, single source via hatchling). Packaging metadata:
+  Alpha classifier, Pytest/AI/QA classifiers, keywords, URLs (Homepage/Documentation = docs site,
+  Repository, Changelog, Issues), extra `otel`. PyPI long description = README with relative
+  links made absolute by `hatch-fancy-pypi-readme` (build-time only).
+- Verified: wheel ships `py.typed`, `pricing.yaml`, judge prompts, report and UI templates;
+  `twine check --strict` passes; the wheel installed in a fresh venv runs the offline support
+  agent regression story from a clean clone (gates exit 1, HTML report written).
+- **`.github/workflows/release.yml`**: tag `v*.*.*` → `build` (tag == `__version__` + CHANGELOG
+  entry via `scripts/release.py check-tag`, `uv build`, `twine check`, wheel smoke test incl.
+  package data and the example) → `publish` (environment `pypi`, `id-token: write`,
+  `pypa/gh-action-pypi-publish` pinned to v1.14.3's SHA) → `github-release` (`gh release create`,
+  notes from the CHANGELOG section, dist attached, replaces a prepared draft).
+  `workflow_dispatch` = rehearsal, optional TestPyPI upload.
+- **`CHANGELOG.md`** (Keep a Changelog, SemVer): `[Unreleased]` + `[0.1.0] - 2026-11-14` by area;
+  included in the site as `docs/changelog.md` (snippets). **`docs/releasing.md`**: one-time
+  setup (trusted publisher, `pypi` environment), release steps, recovery.
+- **Blocker**: the PyPI name `agentlens` is taken by an unrelated project (0.1.44), and
+  `agentlens-eval` too. Nothing renamed; options (rename the distribution, e.g. `agentlens-ai`,
+  or PEP 541) documented in `docs/releasing.md`. No tag pushed, nothing published.
+- 16 new tests (`tests/docs/test_release.py`). 1879 tests, 100% coverage. Design §8c notes.
+- Next: maintainer decides the PyPI name and sets up trusted publishing, then tags `v0.1.0`
+  (issue #34 stays open until then). Backlog otherwise empty.

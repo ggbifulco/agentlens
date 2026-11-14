@@ -1,0 +1,189 @@
+name: Release
+
+# Publishes AgentLens to PyPI and creates the GitHub release (docs/releasing.md).
+#
+#   push a tag vX.Y.Z -> build + checks -> PyPI (trusted publishing) -> GitHub release
+#   workflow_dispatch  -> build + checks only; with "testpypi" also uploads to TestPyPI (dry run)
+#
+# No API token anywhere: PyPI trusts this workflow through OpenID Connect (trusted publishing).
+# One-time setup on PyPI and in the repository settings: docs/releasing.md.
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      testpypi:
+        description: "Also upload to TestPyPI (needs the testpypi trusted publisher)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Never cancel a release in progress.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UV_LOCKED: "1"
+  FORCE_COLOR: "1"
+
+jobs:
+  build:
+    name: Build & check distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Tag matches agentlens.__version__ and has a CHANGELOG entry
+        id: version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            python3 scripts/release.py check-tag "$GITHUB_REF_NAME"
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(sed -nE 's/^__version__ = "(.+)"$/\1/p' src/agentlens/__init__.py)"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Check metadata (twine check --strict)
+        run: uvx twine check --strict dist/*
+
+      - name: Smoke-test the wheel in a fresh virtual environment
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          uv venv --python 3.12 /tmp/smoke
+          uv pip install --python /tmp/smoke/bin/python dist/*.whl
+          test "$(/tmp/smoke/bin/agentlens --version)" = "agentlens $VERSION"
+          # Run from another directory so `agentlens` is imported from the installed wheel.
+          (cd /tmp && /tmp/smoke/bin/python -I - <<'EOF'
+          from importlib import resources
+          import agentlens
+          from agentlens.cli import app  # noqa: F401
+          print("agentlens", agentlens.__version__, "from", agentlens.__file__)
+          assert "site-packages" in agentlens.__file__
+          data = {
+              "agentlens": ["py.typed"],
+              "agentlens.llm": ["pricing.yaml"],
+              "agentlens.evals": [
+                  "prompts/judge_system.txt", "prompts/rubric.txt", "prompts/pass_fail.txt",
+                  "prompts/reference.txt", "prompts/pairwise.txt",
+              ],
+              "agentlens.report": ["templates/report.html.j2", "templates/report.css",
+                                   "templates/report.js", "templates/_macros.html.j2"],
+              "agentlens.ui": ["templates/layout.html.j2", "templates/ui.css"],
+          }
+          for package, names in data.items():
+              for name in names:
+                  assert resources.files(package).joinpath(name).is_file(), (package, name)
+          EOF
+          )
+          # The offline example end to end with the installed wheel (not the source tree).
+          db="$RUNNER_TEMP/smoke.db"
+          /tmp/smoke/bin/agentlens --db "$db" run examples/support_agent/suite.yaml --set-baseline -q
+          SUPPORT_PROMPT_VERSION=v2 /tmp/smoke/bin/agentlens --db "$db" \
+            run examples/support_agent/suite.yaml --name prompt-v2 -q
+          set +e
+          /tmp/smoke/bin/agentlens --db "$db" compare --candidate prompt-v2 \
+            --gates examples/support_agent/gates.yaml --html "$RUNNER_TEMP/report.html"
+          code=$?
+          set -e
+          test "$code" -eq 1   # the regression story: gates must fail
+          test -s "$RUNNER_TEMP/report.html"
+
+      - name: Release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: python3 scripts/release.py notes "$VERSION" -o dist-notes.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: dist-notes.md
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI (dry run)
+    if: github.event_name == 'workflow_dispatch' && inputs.testpypi
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/agentlens
+    permissions:
+      id-token: write # trusted publishing (OIDC)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+  publish:
+    name: Publish to PyPI
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/p/agentlens
+    permissions:
+      id-token: write # trusted publishing (OIDC): no API token
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+
+  github-release:
+    name: GitHub release
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the release and upload the assets
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+      - name: Create the release (replacing a draft prepared for this tag)
+        run: |
+          # A draft release prepared in advance does not own the tag yet: delete it so that
+          # there is exactly one release, with the notes from CHANGELOG.md.
+          for id in $(gh api "repos/$GH_REPO/releases?per_page=100" \
+              --jq ".[] | select(.draft and .tag_name == \"$TAG\") | .id"); do
+            gh api -X DELETE "repos/$GH_REPO/releases/$id"
+          done
+          gh release create "$TAG" dist/* --verify-tag \
+            --title "AgentLens $TAG" --notes-file dist-notes.md
