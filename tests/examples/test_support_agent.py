@@ -13,6 +13,8 @@ from examples.support_agent import (
     DEFAULT_MODEL,
     GIVE_UP_MESSAGE,
     MAX_ITERATIONS,
+    PROMPT_VERSION,
+    PROMPT_VERSION_ENV,
     TOOL_NAMES,
     TOOL_SPECS,
     build_llm,
@@ -20,6 +22,7 @@ from examples.support_agent import (
     detect_intents,
     make_mock_llm,
     make_tools,
+    resolve_prompt_version,
     run_agent,
     support_policy,
     system_prompt,
@@ -41,6 +44,9 @@ SUITE = EXAMPLE / "suite.yaml"
 @pytest.fixture(autouse=True)
 def _offline(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AGENTLENS_MODEL", raising=False)
+    # These tests check the agent's code against the reviewed v1 prompt, whatever the default
+    # version is; catching a bad prompt change is AgentLens's job (tests/e2e, the CI check).
+    monkeypatch.setenv(PROMPT_VERSION_ENV, "v1")
 
 
 def _traced(question: str, **kwargs: Any) -> tuple[str, list[str], int]:
@@ -104,12 +110,27 @@ def test_judged_suite_shares_the_dataset_and_adds_a_rubric() -> None:
 
 def test_prompt_change_is_caught_as_a_regression(monkeypatch: pytest.MonkeyPatch) -> None:
     """Dropping the refund limit from the prompt makes the mock refund the $899 laptop."""
-    prompt = system_prompt().replace("of up to $200 yourself", "yourself")
-    assert prompt != system_prompt()
+    prompt = system_prompt("v1").replace("of up to $200 yourself", "yourself")
+    assert prompt != system_prompt("v1")
     monkeypatch.setattr(agent_module, "system_prompt", lambda version: prompt)
     result = run_suite(load_suite(SUITE))
     failed = {run.case_id for run in result.runs if not run.passed}
     assert failed == {"refund-over-limit", "multi-broken-over-limit"}
+
+
+def test_prompt_version_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert resolve_prompt_version("v2") == "v2"
+    assert resolve_prompt_version() == "v1"  # the fixture's $SUPPORT_PROMPT_VERSION
+    monkeypatch.delenv(PROMPT_VERSION_ENV)
+    assert resolve_prompt_version() == PROMPT_VERSION
+    monkeypatch.setenv(PROMPT_VERSION_ENV, "v2")
+    llm = make_mock_llm()
+    run_agent("Refund order 1004", llm=llm)
+    assert llm.requests[0].messages[0].content == system_prompt("v2")
+
+
+def test_v2_prompt_drops_only_the_refund_limit() -> None:
+    assert Rules.from_prompt(system_prompt("v2")) == Rules(refund_limit=None, refund_window_days=30)
 
 
 # --- the agent loop --------------------------------------------------------------------------
@@ -147,7 +168,7 @@ def test_run_agent_executes_tool_calls_of_any_client() -> None:
     assert trace.tool_calls == ["lookup_order", "track_order", "lookup_order"]
     assert llm.requests[0].tools == TOOL_SPECS
     assert llm.requests[0].temperature == 0
-    assert llm.requests[0].messages[0].content == system_prompt()
+    assert llm.requests[0].messages[0].content == system_prompt("v1")
     results = [json.loads(m.content or "") for m in llm.requests[-1].messages if m.role == "tool"]
     assert results[0]["customer"]["name"] == "Chiara Bianchi"
     assert results[1]["status"] == "processing"
@@ -201,7 +222,7 @@ def test_main_prints_answer_and_tools(capsys: pytest.CaptureFixture[str]) -> Non
 
 
 def test_rules_are_read_from_the_prompt() -> None:
-    rules = Rules.from_prompt(system_prompt())
+    rules = Rules.from_prompt(system_prompt("v1"))
     assert rules == Rules(refund_limit=200.0, refund_window_days=30)
     assert Rules.from_prompt("Be nice.") == Rules()
     assert Rules.from_prompt("refunds of up to $99.50").refund_limit == 99.5
@@ -274,7 +295,7 @@ def test_more_mock_answers(question: str, needle: str) -> None:
 def test_mock_reports_tool_errors_and_bad_results() -> None:
     def request(*results: str, question: str = "Refund order 1001") -> LLMRequest:
         names = ["lookup_order", "issue_refund"][: len(results)]
-        messages = [Message.system(system_prompt()), Message.user(question)]
+        messages = [Message.system(system_prompt("v1")), Message.user(question)]
         for i, (name, content) in enumerate(zip(names, results, strict=True), start=1):
             call = ToolCall(id=f"call_{i}", name=name, arguments={})
             messages += [Message.assistant(None, [call]), Message.tool(content, f"call_{i}")]
@@ -292,7 +313,7 @@ def test_mock_reports_tool_errors_and_bad_results() -> None:
     update_failed = support_policy(
         LLMRequest(
             messages=[
-                Message.system(system_prompt()),
+                Message.system(system_prompt("v1")),
                 Message.user("Change the address of order 1003 to 1 Main St"),
                 Message.assistant(None, [ToolCall(id="call_1", name="lookup_order")]),
                 Message.tool(json.dumps({"status": "processing"}), "call_1"),
