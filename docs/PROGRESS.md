@@ -392,3 +392,26 @@ Append-only log of development sessions (newest at the bottom).
 - Docs: README "Running a suite" (verified), design §6 implementation notes.
 - No new dependencies. 1342 tests, 100% coverage.
 - Next: #22 Comparator with paired bootstrap confidence intervals.
+
+## 2026-11-14 — #22 Comparator with paired bootstrap confidence intervals
+- Added `agentlens.compare`. `metrics.py`: `RunMetrics`/`run_metrics(trace, eval_results)`,
+  `CaseMetrics` (runs averaged per case: `pass_rate`, `score:<evaluator>`, `cost_usd`,
+  `latency_ms`, `steps`; unknown metrics absent, never zero), `ExperimentMetrics`,
+  `collect_metrics(store, id | name | Experiment)`, `metrics_from_run(ExperimentRun)`,
+  `metric_direction` (`Direction.HIGHER_IS_BETTER` / `LOWER_IS_BETTER`).
+- `bootstrap.py` (stdlib only): `bootstrap_mean_ci(values, resamples=10_000, confidence=0.95,
+  seed=0) -> ConfidenceInterval(low, high, confidence)` (percentile bootstrap, clamped to the data
+  range, resampled positions independent of the values), `percentile` (NumPy-style linear).
+- `comparator.py`: `compare(baseline_metrics, candidate_metrics, resamples, confidence, seed,
+  min_cases=2)` and `compare_experiments(store, baseline, candidate, ...)` → `Comparison`
+  (`metrics: list[MetricDelta]` with `n`, `baseline`, `candidate`, `delta`, `delta_pct`, `ci`,
+  `status`; `cases: list[CaseDelta]`; `added_cases`/`removed_cases`; `regressions`,
+  `improvements`, `regressed_cases`, `improved_cases`, `metric()`, `case()`).
+- Verdicts: `MetricStatus` regressed/improved/unchanged/insufficient_data (CI entirely on one side
+  of zero); `CaseStatus` regressed/improved/mixed/unchanged from quality metrics only.
+- Tests: 49 new, incl. hypothesis properties (reproducibility, bounds, shift/scale equivariance,
+  sign-flip mirror, self-comparison = 0, swap symmetry) and a 95% coverage simulation; end-to-end
+  with `run_suite` + `SQLiteStore`.
+- Docs: README "Comparing experiments" (verified), design §7 implementation notes.
+- No new dependencies. 1391 tests, 100% coverage.
+- Next: #23 Gates config and exit codes.
