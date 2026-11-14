@@ -282,6 +282,27 @@ for result in evaluate_case(trace, case, [
 # llm_pass_fail 1.0 judge verdict: pass: Mentions order 1234.
 ```
 
+`PairwiseJudge` compares two runs of the same case (baseline A vs candidate B). It asks the judge
+in both orders — A shown first, then B shown first — and averages, so a judge that just prefers
+whichever answer comes first ends up with a tie instead of a fake winner:
+
+```python
+from agentlens.evals import PairwiseJudge
+from agentlens.llm import MockLLM
+from agentlens.schema import Trace
+
+baseline = Trace(name="support", output="Refund done.")
+candidate = Trace(name="support", output="Your refund of $42 for order 1234 is on its way.")
+judge = MockLLM(['{"reasoning": "Output 2 states $42.", "winner": "2"}',   # A shown first
+                 '{"reasoning": "Output 1 states $42.", "winner": "1"}'])  # B shown first
+result = PairwiseJudge("Confirms the refund amount", client=judge, cache=False).compare(
+    baseline, candidate)
+print(result.winner, result.preference, result.consistent)
+print(result.to_eval_result(candidate="b").passed)
+# b 0.0 True
+# True
+```
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/) · [LLM judges](docs/judges.md).

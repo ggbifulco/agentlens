@@ -326,3 +326,24 @@ Append-only log of development sessions (newest at the bottom).
   self-preference bias, calibration against human labels), README "LLM judges" example (verified).
 - No new dependencies. 1131 tests, 100% coverage.
 - Next: #19 Pairwise A/B judge.
+
+## 2026-11-13 — #19 Pairwise A/B judge
+- Added `agentlens.evals.judge.pairwise` (re-exported from `agentlens.evals.judge` and
+  `agentlens.evals`): `PairwiseJudge(criteria, include_expected=True, template=None, model|client,
+  cache, retries, max_tokens)` with `compare(trace_a, trace_b, case=None)` / async `acompare`
+  (orders judged concurrently) → `PairwiseResult` (`winner` a/b/tie, `preference` for A in [0, 1],
+  `consistent`, `confidence`, `orders` = two `OrderVerdict`, `reason`, `reasons`, `details()`,
+  `to_eval_result(candidate="b")` → passed when the candidate wins or ties). New packaged prompt
+  `prompts/pairwise.txt` (`$output_1`/`$output_2`, reply `{"reasoning", "winner": "1"|"2"|"tie"}`),
+  tolerant `parse_position`.
+- Position-bias mitigation: every comparison is judged as (A, B) and (B, A); the swapped answer is
+  mapped back to A/B and the preferences (1 / 0.5 / 0) averaged. Opposite answers → tie with
+  confidence 0; winner vs tie → that winner with confidence 0.5; all recorded in `details["orders"]`.
+  An unparseable order → `error`, tie, failed `EvalResult` (never decided on one order).
+- Refactor: the client/cache/call flow of `LLMJudge` moved to a new `BaseJudge` base (LLMJudge API
+  unchanged). Cache key per order = `judge_cache_key(model, prompt, json([output 1, output 2]))`.
+- Not in the evaluator registry (needs two traces); the comparator (#22) will call it per case on
+  (baseline, candidate). Docs: `docs/judges.md` (pairwise usage, position-bias section), design §5
+  notes, README example (verified).
+- No new dependencies. 1174 tests, 100% coverage.
+- Next: #20 YAML suite and dataset loader (M4).

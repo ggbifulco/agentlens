@@ -546,8 +546,9 @@ Implementation notes (`src/agentlens/evals/judge/`, `evals/builtin/judges.py`, `
   concrete judge implements `build_prompt(trace, case) -> JudgePrompt(system, user, output)`,
   `parse_reply(json_object) -> Verdict` (raises `JudgeParseError`) and `make_result(verdict, run)`.
   The base class owns the flow, identical in `evaluate` and `aevaluate` (`client.acomplete`):
-  cache lookup → call → parse → retry → cache write → `EvalResult`. The pairwise judge (#19) only
-  adds a prompt and a parser.
+  cache lookup → call → parse → retry → cache write → `EvalResult`. (Since #19 the non-evaluator
+  part — client, cache, `run_judge`/`arun_judge`, `parse_reply` — is `BaseJudge`, which
+  `LLMJudge` extends with `build_prompt`/`make_result`/`evaluate`.)
 - **Request**: `temperature=0.0` always (`JUDGE_TEMPERATURE`), `response_format={"type":
   "json_object"}` (OpenAI JSON mode; the Anthropic adapter emulates it with a system instruction),
   optional `max_tokens`, `model=None` (the client's own). Prompts say "JSON" (required by OpenAI's
@@ -611,6 +612,40 @@ Implementation notes (`src/agentlens/evals/judge/`, `evals/builtin/judges.py`, `
   `include_expected=False` — `case.expected` as a *reference* ("does not need to match word for
   word"). Scalar shorthand: `{llm_rubric: "Polite"}` sets `criteria`.
 - Bias and calibration guidance for users: `docs/judges.md`.
+
+Implementation notes (`src/agentlens/evals/judge/pairwise.py`, `evals/prompts/pairwise.txt`, #19, FR-E2):
+- **Own API, not an evaluator**: comparing needs two traces, so `PairwiseJudge(criteria, *,
+  include_expected=True, template=None, model, client, cache, retries=1, max_tokens=None)` exposes
+  `compare(trace_a, trace_b, case=None) -> PairwiseResult` and `acompare` (the two orders run
+  concurrently with `asyncio.gather`). It extends `BaseJudge` (extracted from `LLMJudge`, which keeps
+  its API), so model resolution, temperature 0, JSON mode, parse + retry and caching are shared.
+  Not registered in the evaluator registry: a registry entry would have to fake
+  `evaluate(trace, case)`. The comparator (#22) will build one `PairwiseJudge` from the suite/CLI
+  options and call it per case on (baseline trace, candidate trace), storing
+  `result.to_eval_result(candidate="b")` (evaluator name `pairwise`, overridable with `name=`).
+- **Prompt**: `output_1`/`output_2` (positions, never "A"/"B", so labels carry no bias), the case
+  input, the optional reference, and an instruction that order/length are not evidence; reply
+  `{"reasoning", "winner": "1"|"2"|"tie"}`. `parse_position` also accepts `1`/`2` numbers,
+  "output 1", "first"/"second", "draw"/"equal"/"neither" and keys `choice`/`better`/`preference`/
+  `verdict`; "A"/"B" are rejected (ambiguous after swapping).
+- **Position-bias mitigation**: order `ab` shows A first, `ba` shows B first; each positional answer
+  is mapped back to A/B, converted to a preference for A (1 / 0.5 / 0) and the two are averaged.
+  `winner` = a if > 0.5, b if < 0.5, else tie; `consistent` = both mapped winners equal;
+  `confidence = 1 - |pref_ab - pref_ba|` (1 consistent, 0.5 winner vs tie, 0 opposite → tie).
+  Alternatives rejected: a single random order (bias only averaged over many cases, not per case),
+  asking for a score per output (absolute scales are less reliable than a choice).
+- **Cache**: each order is a normal judge call keyed by `judge_cache_key(judge model, prompt,
+  json([output 1, output 2]))` — the presentation order is in the key, so `ab` and `ba` never share
+  an entry, while the same ordered pair reuses its verdict (also for `compare(B, A)`; identical
+  outputs make one call).
+- **Failures**: if either order is still unparseable after retries, `PairwiseResult.error` is set
+  ("order ab: ..."), the result is a tie with confidence 0, and `to_eval_result` fails (score 0,
+  `details["error"]` in the `error_result` shape). No decision from a single order.
+- **`PairwiseResult`** (frozen dataclass): `winner`, `preference`, `consistent`, `confidence`,
+  `orders` (two `OrderVerdict`: order, raw `position`, mapped `winner`, reasoning, call metadata,
+  error/raw reply), `criteria`, `error`; `reason`, `reasons`, `details()`,
+  `to_eval_result(candidate="b")` → score = the candidate's preference, passed when the candidate
+  wins or ties.
 
 ## 6. Suites (YAML)
 ```yaml
