@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import logging
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -23,6 +24,7 @@ from agentlens.store import SQLiteStore
 from agentlens.suite import CaseResult, ExperimentNotFoundError, ExperimentRun, RunResult, Suite
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
+_ids = itertools.count()
 
 
 def run(
@@ -37,7 +39,7 @@ def run(
     error: str | None = None,
 ) -> RunResult:
     """A run of ``case_id`` with the given metrics (one LLM span per step)."""
-    trace_id = f"{case_id}-{repetition}-{id(object())}"
+    trace_id = f"{case_id}-{repetition}-{next(_ids)}"  # unique: the store upserts by id
     spans = [
         Span(
             trace_id=trace_id,
