@@ -124,7 +124,7 @@ def resolve_agent(
         walked += (":" if i == 0 else ".") + part
     if not callable(target):
         raise AgentImportError(
-            f"agent {spec!r} is a {type(target).__name__}, not a callable "
-            "(expected a function, a method or an object with __call__)"
+            f"agent {spec!r} is not callable (got {type(target).__name__}; "
+            "expected a function, a method or an object with __call__)"
         )
     return target  # type: ignore[no-any-return]

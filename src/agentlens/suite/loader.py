@@ -192,7 +192,7 @@ def _validation_issues(exc: ValidationError, data: Any, smap: SourceMap) -> list
                     f"got a mapping with keys {keys} (are the parameters indented under the name?)",
                 )
             )
-        elif loc[:1] == ("agent",) and kind != "value_error":
+        elif loc[:1] == ("agent",) and kind not in {"value_error", "missing"}:
             issues.append(
                 smap.issue(("agent",), "agent must be an import path 'package.module:callable'")
             )
