@@ -23,7 +23,11 @@ dependencies = [
     "jsonschema>=4.18",
     "pydantic>=2.9",
     "pyyaml>=6.0",
+    "typer>=0.15",
 ]
+
+[project.scripts]
+agentlens = "agentlens.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/ggbifulco/agentlens"

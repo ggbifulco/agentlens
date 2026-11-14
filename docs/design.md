@@ -834,6 +834,48 @@ Implementation notes — gates (`src/agentlens/compare/gates.py`, #23, FR-S5):
 `agentlens run`, `agentlens compare`, `agentlens report`, `agentlens baseline set`,
 `agentlens traces ls/show`, `agentlens export/import`, `agentlens ui`.
 
+Implementation notes (`src/agentlens/cli/`, `src/agentlens/report/`, #24):
+- **Typer** (runtime dependency): commands are typed functions whose annotations are the
+  argument parsing, help texts come from the same place, and `typer.testing.CliRunner` tests them
+  in-process. Recent Typer vendors Click and brings `rich` (help rendering; the rich terminal
+  report of #26 reuses it) and `shellingham`. Alternatives: `argparse` (no new dependency, but
+  hand-written subcommand plumbing and help) and plain Click (decorators repeat what the types
+  already say). Entry point `agentlens = "agentlens.cli:app"`, plus `python -m agentlens`.
+  Rich's pretty tracebacks are disabled: they can print local variables, e.g. API keys.
+- **Commands**: `run SUITE` (overrides `--name/--model/--repetitions/--concurrency/--timeout`,
+  progress per run on stderr unless `-q`, `--gates` checks absolute rules via
+  `evaluate_gates(run=...)`, `--set-baseline` marks the experiment unless a gate failed: a failing
+  run must not become the reference); `compare --candidate X [--baseline Y]` where `Y` is an id,
+  a name or the keyword `baseline` (default) = the marked baseline of the *candidate's* suite (an
+  experiment literally named "baseline" is reachable by id); runs are loaded once and passed to
+  `compare_runs` and, as `run=`, to `evaluate_gates`, so absolute gates see every candidate case
+  exactly as `run --gates` does, while delta/count gates use the paired cases; `--json PATH`
+  writes a `ComparisonReport` (`-` = JSON on stdout instead of text). `report TARGET` takes an
+  experiment id/name or a JSON file (comparison or experiment report, re-rendered).
+  `baseline set|unset|show`, `experiments ls`, `traces ls|show`, `export`/`import` (JSONL) are
+  thin wrappers over the store and suite APIs. `experiments ls` was added (not in the list above)
+  because names and ids have to be discoverable for `compare`/`report`.
+- **Global options**: `--db PATH` / `$AGENTLENS_DB`, default `.agentlens/agentlens.db`; commands
+  that only read require the file to exist (a typo in the path is an error, not a new empty
+  database); `run` and `import` create it. `--version`.
+- **Exit codes**: `0` ok, `1` a gate failed (`GateReport.exit_code`), `2` usage/configuration
+  error — Click's own code for bad arguments, reused for `SuiteError`/`GatesError`/
+  `AgentImportError` (printed with every `file:line:column` issue), unknown experiment/trace,
+  `StoreError`, `JSONLFormatError`, unreadable/unwritable files, a corrupt database, an
+  unavailable report format. Errors are one `error: ...` block on stderr; anything else is a bug
+  and keeps its traceback. Suite and gates files are loaded before the database is opened, so a
+  bad config runs nothing and creates nothing.
+- **Reports** (`agentlens.report`): models `ExperimentReport.from_runs(experiment, runs, gates=)`
+  (totals, `run_metrics` means, `CaseSummary` per case with failed evaluators) and
+  `ComparisonReport(comparison, gates)`; `load_report(path)` reads either (or a bare
+  `Comparison`). `render(report, fmt)` dispatches on a registry keyed by `ReportFormat`
+  (`text`, `json`, `markdown`, `html`); only plain text (no colours, same in a terminal, a CI log
+  or a file) and JSON exist now. #26 (rich terminal), #27 (Markdown) and #28 (HTML) plug in with
+  `register_renderer`, so the CLI's `--format` needs no change; asking for a format with no
+  renderer is exit 2 naming the issue that brings it.
+- **Not yet**: `agentlens ui` (M6), the pairwise judge in `compare` (§7 note), user `config`
+  values on `run` (Python API only).
+
 ## 9. Testing strategy
 - Unit tests per module; property tests (hypothesis) for schema round-trips and bootstrap.
 - Integration tests run the example agent end-to-end with `MockLLM` (no keys, deterministic).
