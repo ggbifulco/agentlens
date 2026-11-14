@@ -1,0 +1,31 @@
+{% import "_macros.html.j2" as m %}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{ title }} · AgentLens</title>
+<style>
+{{ css }}
+{{ ui_css }}
+</style>
+</head>
+<body class="ui ui-{{ page }}">
+<header class="top">
+  <div class="wrap">
+    {{ m.nav(nav) }}
+{% block header %}
+    <h1>{{ title }}</h1>
+{% endblock %}
+  </div>
+</header>
+
+<main class="wrap">
+{% block content %}{% endblock %}
+</main>
+
+<footer class="wrap muted small">{{ footer }}</footer>
+{% block scripts %}{% endblock %}
+</body>
+</html>

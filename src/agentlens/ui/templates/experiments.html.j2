@@ -1,0 +1,59 @@
+{% extends "layout.html.j2" %}
+{% block content %}
+  <section>
+    <form class="filter-form" method="get" action="/experiments" role="search" aria-label="Filter experiments">
+      <label>Name <input type="text" name="name" value="{{ f.name or '' }}" placeholder="any"></label>
+      <label>Suite
+        <select name="suite">
+          <option value="">any</option>
+{% for suite in suites %}
+          <option value="{{ suite }}"{% if suite == f.suite %} selected{% endif %}>{{ suite }}</option>
+{% endfor %}
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="submit">Filter</button>
+{% if f.name or f.suite %}
+        <a href="/experiments">Reset</a>
+{% endif %}
+      </div>
+    </form>
+  </section>
+
+  <section id="experiments">
+    <h2>Experiments <span class="muted small">{{ rows|length }}</span> <a class="small api-link" href="/api/experiments">JSON</a></h2>
+{% if rows %}
+    <form method="get" action="/compare" aria-label="Compare two experiments">
+    <div class="table-scroll">
+    <table class="list">
+      <thead>
+        <tr><th title="Baseline">Base</th><th title="Candidate">Cand.</th><th>Name</th><th>Suite</th><th>Created (UTC)</th><th>Model</th><th>Git</th><th></th></tr>
+      </thead>
+      <tbody>
+{% for row in rows %}
+        <tr{% if row.is_baseline %} class="is-baseline"{% endif %}>
+          <td><input type="radio" name="baseline" value="{{ row.id }}" aria-label="baseline: {{ row.name }}"{% if row.id == checked.baseline %} checked{% endif %}></td>
+          <td><input type="radio" name="candidate" value="{{ row.id }}" aria-label="candidate: {{ row.name }}"{% if row.id == checked.candidate %} checked{% endif %}></td>
+          <td><a href="{{ row.href }}"><strong>{{ row.name }}</strong></a>{% if row.is_baseline %} <span class="tag baseline-tag">baseline</span>{% endif %}<br><span class="muted small"><code>{{ row.id }}</code></span></td>
+          <td><code>{{ row.suite }}</code></td>
+          <td class="num">{{ row.created }}</td>
+          <td>{% if row.model %}<code>{{ row.model }}</code>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td>{% if row.git %}<code>{{ row.git }}</code>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td class="actions"><a href="{{ row.traces_href }}">traces</a>{% if row.vs_baseline %} · <a href="{{ row.vs_baseline }}">vs baseline</a>{% endif %}</td>
+        </tr>
+{% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <div class="form-actions compare-actions">
+      <button type="submit">Compare baseline → candidate</button>
+      <span class="muted small">paired bootstrap confidence intervals{% if has_gates %}, gates checked{% endif %}</span>
+    </div>
+    </form>
+{% elif f.name or f.suite %}
+    <p class="muted">No experiment matches the filters.</p>
+{% else %}
+    <p class="muted">No experiments yet: run a suite with <code>agentlens run SUITE --name NAME</code>.</p>
+{% endif %}
+  </section>
+{% endblock %}

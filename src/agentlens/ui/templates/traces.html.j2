@@ -1,0 +1,80 @@
+{% extends "layout.html.j2" %}
+{% block content %}
+  <section>
+    <form class="filter-form" method="get" action="/traces" role="search" aria-label="Filter traces">
+      <label>Name <input type="text" name="name" value="{{ f.name or '' }}" placeholder="any"></label>
+      <label>Experiment
+        <select name="experiment">
+          <option value="">any</option>
+{% for exp in experiments %}
+          <option value="{{ exp.id }}"{% if exp.id == f.experiment %} selected{% endif %}>{{ exp.label }}</option>
+{% endfor %}
+        </select>
+      </label>
+      <label>Case <input type="text" name="case_id" value="{{ f.case_id or '' }}" placeholder="any"></label>
+{% for item in f.meta %}
+      <label>Metadata <input type="text" name="meta" value="{{ item }}" placeholder="key=value"></label>
+{% endfor %}
+      <label>Metadata <input type="text" name="meta" value="" placeholder="key=value"></label>
+      <label class="check"><input type="checkbox" name="errors" value="1"{% if f.errors %} checked{% endif %}> errors only</label>
+      <label>Per page
+        <select name="limit">
+{% for size in sizes %}
+          <option value="{{ size }}"{% if size == f.limit %} selected{% endif %}>{{ size }}</option>
+{% endfor %}
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="submit">Filter</button>
+{% if f.active %}
+        <a href="/traces">Reset</a>
+{% endif %}
+      </div>
+    </form>
+  </section>
+
+  <section id="traces">
+    <h2>Traces{% if range_label %} <span class="muted small">{{ range_label }}{% if f.active %} · filtered{% endif %}</span>{% endif %} <a class="small api-link" href="{{ api_href }}">JSON</a></h2>
+{% if rows %}
+    <div class="table-scroll">
+    <table class="list">
+      <thead>
+        <tr><th>Started (UTC)</th><th>Name</th><th>Case</th><th>Experiment</th><th>Status</th><th class="num">Latency</th><th class="num">Cost</th><th class="num">Steps</th><th class="num">Tokens</th><th>Output</th></tr>
+      </thead>
+      <tbody>
+{% for row in rows %}
+        <tr{% if row.status in ("error", "fail") %} class="has-error"{% endif %}>
+          <td class="num"><a href="{{ row.href }}">{{ row.started }}</a></td>
+          <td class="nowrap"><a href="{{ row.href }}">{{ row.name }}</a></td>
+          <td>{% if row.case_id %}<code>{{ row.case_id }}</code> <span class="muted small">#{{ row.repetition }}</span>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td class="nowrap">{% if row.experiment %}<a href="{{ row.experiment_href }}">{{ row.experiment }}</a>{% else %}<span class="muted">-</span>{% endif %}</td>
+          <td>{% if row.status == "error" %}<span class="pill st-fail" title="{{ row.error }}">error</span>{% elif row.status == "fail" %}<span class="pill st-fail" title="failed: {{ row.failed }}">fail</span>{% elif row.status == "pass" %}<span class="pill st-pass">pass</span>{% else %}<span class="pill">ok</span>{% endif %}</td>
+          <td class="num">{{ row.latency }}</td>
+          <td class="num">{{ row.cost }}</td>
+          <td class="num">{{ row.steps }}</td>
+          <td class="num">{{ row.tokens }}</td>
+          <td class="preview">{% if row.error %}<span class="err">{{ row.error }}</span>{% else %}{% if row.failed %}<span class="err">failed: {{ row.failed }}</span> · {% endif %}{{ row.output }}{% endif %}</td>
+        </tr>
+{% endfor %}
+      </tbody>
+    </table>
+    </div>
+{% elif f.offset %}
+    <p class="muted">No traces on this page.</p>
+{% elif f.active %}
+    <p class="muted">No trace matches the filters.</p>
+{% else %}
+    <p class="muted">No traces yet: record some with <code>agentlens run SUITE</code> or <code>agentlens.run(..., sink=store.save_trace)</code>.</p>
+{% endif %}
+{% if prev_href or next_href %}
+    <nav class="pager" aria-label="Pages">
+{% if prev_href %}
+      <a href="{{ prev_href }}" rel="prev">← Newer</a>
+{% endif %}
+{% if next_href %}
+      <a href="{{ next_href }}" rel="next">Older →</a>
+{% endif %}
+    </nav>
+{% endif %}
+  </section>
+{% endblock %}
