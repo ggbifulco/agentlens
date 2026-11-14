@@ -25,6 +25,9 @@ uv run pre-commit install     # optional: run the checks on every commit
 | Live tests (real LLMs, need API keys) | `AGENTLENS_LIVE_TESTS=1 uv run pytest -m live` |
 | All pre-commit hooks | `uv run pre-commit run --all-files` |
 | Build sdist + wheel | `uv build` |
+| Docs site, live preview | `uv run --group docs mkdocs serve` |
+| Docs site, as CI builds it | `uv run --group docs mkdocs build --strict` |
+| Regenerate the demo GIF | `uv run --with pillow python scripts/make_demo_gif.py` |
 
 The full local gate, identical to what CI runs:
 
@@ -34,7 +37,9 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run
 
 CI (`.github/workflows/ci.yml`) runs the same gate on every push to `main` and on every pull
 request: a lint/format job, plus mypy + pytest on Python 3.11, 3.12 and 3.13. Each test job uploads
-its coverage report (`coverage.xml` + HTML) as a build artifact named `coverage-py3.X`.
+its coverage report (`coverage.xml` + HTML) as a build artifact named `coverage-py3.X`, and a docs
+job builds the site with `mkdocs build --strict` (a broken link or docstring fails it). On `main`,
+`.github/workflows/docs.yml` publishes the site to GitHub Pages.
 
 ## Conventions
 
@@ -47,6 +52,8 @@ its coverage report (`coverage.xml` + HTML) as a build artifact named `coverage-
   (`feat(tracing): ...`, `fix(store): ...`, `chore: ...`).
 - **Branches**: `feat/<issue>-<slug>`, `chore/...`, `docs/...`, `test/...`.
 - **Decisions**: significant design decisions get an ADR in `docs/adr/`.
+- **Docs**: the README stays short (pitch, quickstart, links); details live in `docs/` pages
+  listed in the `mkdocs.yml` nav (a test fails if a page is missing from it).
 
 The end-to-end workflow followed by the AI developer (and a good template for humans) is in
 [AGENTS.md](AGENTS.md).

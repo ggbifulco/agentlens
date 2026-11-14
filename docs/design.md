@@ -1171,6 +1171,40 @@ Implementation notes — local web UI (`src/agentlens/ui/`, `cli/ui.py`, #31, FR
 - **Not yet**: the pairwise judge in `compare` (§7 note), user `config`
   values on `run` (Python API only).
 
+## 8b. Documentation site (#33)
+Implementation notes (`mkdocs.yml`, `docs/`, `scripts/make_demo_gif.py`, `scripts/mkdocs_hooks.py`):
+- **mkdocs-material** + **mkdocstrings[python]** in a uv dependency group `docs` (not a runtime
+  dependency or extra; not in `dev` either, so `uv sync` and the test jobs stay lean). CI builds
+  it with `uv run --only-group docs mkdocs build --strict` (job `docs` in `ci.yml`): any warning
+  (broken link or anchor, a page missing from the nav, a docstring parameter that is not in the
+  signature) fails the PR. `docs.yml` builds again on `main` and deploys with
+  `actions/upload-pages-artifact` + `actions/deploy-pages` (Pages source: GitHub Actions); site
+  URL `https://ggbifulco.github.io/agentlens/`.
+- **README vs site**: the README keeps the pitch, badges, a quickstart that runs offline from a
+  fresh clone, a "three files" example, the architecture diagram, the GIF and screenshots, and
+  links; the long sections moved (unchanged) to pages: `concepts/` (tracing, LLM clients, store,
+  replay, evaluators, judges, suites, comparison & gates, reports), `cli.md`, `github-action.md`,
+  `pytest-plugin.md`, `web-ui.md`, `opentelemetry.md`, plus `getting-started.md` and `index.md`.
+  Links from `docs/` to files outside it (examples, workflows, tests) are absolute GitHub URLs,
+  since mkdocs can only resolve pages inside `docs/`.
+- **API reference**: one page per package (`::: agentlens.<pkg>`, members from `__all__`, Google
+  docstring style). Docstrings keep their Sphinx roles (they read well in `help()`); the hook
+  `scripts/mkdocs_hooks.py` strips `:class:`-style roles, `~pkg.` prefixes and `::` from the
+  rendered API pages only. Four docstrings that documented several parameters on one line were
+  split so griffe can match them to the signature.
+- **Demo GIF**: no terminal recorder is needed. `make_demo_gif.py` runs the real commands in a
+  pseudo-terminal (so the CLI picks its `rich` output), parses the ANSI text with `rich`
+  (`Text.from_ansi`) and draws each frame with Pillow (typing, streaming progress, pauses;
+  box-drawing characters drawn as lines so borders join). One fixed palette (theme colours blended
+  over the background at 6 levels: what anti-aliased text is made of) keeps colours stable and
+  lets Pillow store only each frame's changed area: ~225 frames in ~350 KB. Pillow is only
+  pulled in ad hoc (`uv run --with pillow`), not a project dependency. Latency in the recording is
+  real wall-clock time, so that row differs between regenerations.
+- **Tests** (`tests/docs/test_docs.py`): every nav page exists and every `docs/**/*.md` is in the
+  nav, the README's images exist and the GIF is < 2 MB, the quickstart names real files, the
+  README's "three files" example is copied verbatim into a temp dir and run through the CLI (gates
+  pass; then fail after a regression), and the hook rewrites API pages only.
+
 ## 9. Testing strategy
 - Unit tests per module; property tests (hypothesis) for schema round-trips and bootstrap.
 - Integration tests run the example agent end-to-end with `MockLLM` (no keys, deterministic).
