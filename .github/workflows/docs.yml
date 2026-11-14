@@ -1,0 +1,53 @@
+name: Docs
+
+# Builds the mkdocs-material site and publishes it to GitHub Pages
+# (https://ggbifulco.github.io/agentlens/). Pull requests only build it (ci.yml, job "docs").
+# One-time setup: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time; never cancel a deployment that is in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  UV_LOCKED: "1"
+  NO_MKDOCS_2_WARNING: "1"
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Build (strict)
+        run: uv run --only-group docs mkdocs build --strict --site-dir site
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
