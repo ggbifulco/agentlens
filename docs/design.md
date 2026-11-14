@@ -739,6 +739,49 @@ FR-S2/FR-S3):
   by hand), `find_experiment` (id, else most recent with that name) → `ExperimentNotFoundError`.
   Built on `save_experiment` upserts, so any `Store` backend works.
 
+Implementation notes — pytest plugin (`integrations/pytest_plugin.py`, #25, FR-S6):
+- **Registration**: entry point `pytest11: agentlens = "agentlens.integrations.pytest_plugin"`, so
+  pytest loads it in every project that installs AgentLens. It must be inert: it only adds
+  options and the `agentlens_run` fixture; the suite runner and store are imported lazily inside
+  the hooks (a test checks that loading the plugin does not import them).
+- **Collection**: `--agentlens SUITE` (repeatable, `action="append"`) resolves each file against
+  the invocation dir (missing → `UsageError`) and appends it to `config.args` in
+  `pytest_configure`, unless a positional argument already names it (`suite.yaml::case_id` keeps
+  narrowing). `pytest_collect_file` claims exactly those files (`AgentlensSuiteFile`), so suites
+  sit next to normal tests and `-k`/`-m`/node ids/`--collect-only`/`--junitxml` work unchanged. A
+  `SuiteError` is a collection error rendered as its `file:line:column` issues (no traceback).
+  Alternative considered: claiming every `*.yaml` under the test paths — too greedy for projects
+  with unrelated YAML; creating items in `pytest_collection_modifyitems` — loses collection-error
+  reporting and node-id selection.
+- **Granularity**: one item (`AgentlensCase`) per case, node id `<suite file>::<case_id>`, report
+  header `agentlens <suite>::<case_id>` (`reportinfo`); suite name and case tags are extra
+  keywords for `-k`. A case passes when every repetition passed (repetitions measure flakiness,
+  so a flaky case should fail). Alternative: one item per case × repetition — noisier output and
+  inflated test counts for the same information, which the report already lists per repetition.
+- **Execution**: the first selected case of a suite runs **all selected cases** of that file with
+  `run_suite` (a copy of the suite with the deselected cases removed), so a pytest session gives
+  one experiment per suite with the suite's concurrency, and deselected cases never run. Errors
+  that stop a suite (agent import, store) become `SuiteRunError` on every case of that suite.
+  `--agentlens-repetitions` overrides the suites' repetitions; `--agentlens-db PATH` opens one
+  `SQLiteStore` for the session (closed in `pytest_unconfigure`). Per-session state lives in
+  `config.stash`, never in module globals (pytester and xdist run several sessions per process).
+- **Report**: `format_case_result(result, suite=)` — case input/expected, then per failing
+  repetition the agent error (or output) and each failed `EvalResult` as `name: score S: reason`;
+  values are JSON, truncated at 200 characters. Used by `AgentlensCase.repr_failure` and by
+  `assert_passed(result)`, which raises `CaseFailedError` (an `AssertionError`). Junit properties:
+  `agentlens_experiment`, `agentlens_pass_rate`, `agentlens_score.<evaluator>`.
+- **Python tests**: fixture `agentlens_run(agent, case, *, evaluators=(), repetitions=None,
+  model=None, timeout_s=None) -> CaseResult` runs a one-case `Suite` named after the test
+  (`evaluators` are its defaults, so a case evaluator with the same name wins). Synchronous
+  (`run_suite` starts its own loop). A `@pytest.mark.agentlens(suite=...)` marker was not added:
+  the fixture covers the Python side with less API.
+- **This repository's own run** uses `-p no:agentlens` (pyproject `addopts`): an auto-loaded
+  plugin imports `agentlens` before pytest-cov starts measuring, which would hide every
+  module-level line. The plugin's tests load it in `pytester` runs. Because the distribution
+  now has a `pytest11` entry point, pytest marks the `agentlens` package for assertion
+  rewriting; `runpy` cannot run modules through that import hook, so the `python -m agentlens`
+  test removes it from `sys.meta_path` (no effect outside pytest).
+
 ## 7. Comparison & gates
 - Metrics per case: pass rate, mean score per evaluator, cost, latency, steps.
 - Aggregate delta with **paired bootstrap** (10k resamples over cases) → 95% CI.
