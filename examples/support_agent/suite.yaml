@@ -1,0 +1,12 @@
+# Golden dataset of the example support-desk agent (FR-D1).
+# Offline and deterministic by default (the agent falls back to the scripted `mock:support`
+# policy); with a real model: AGENTLENS_MODEL=openai:gpt-4o-mini agentlens run <this file>.
+# Run from the repository root, so that `examples.support_agent` is importable.
+name: support-agent
+description: Support-desk agent with mock tools (refunds, tracking, address changes, FAQ, escalation).
+agent: examples.support_agent:run_agent
+repetitions: 1
+defaults:
+  # Every case: no error anywhere in the trace and at most 6 LLM calls.
+  evaluators: [no_error, {max_steps: 6}]
+cases: cases.yaml
