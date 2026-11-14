@@ -25,6 +25,7 @@ __all__ = [
     "EXIT_USAGE",
     "State",
     "auto_format",
+    "db_exists",
     "fail",
     "open_store",
     "user_errors",
@@ -99,6 +100,12 @@ def _state(ctx: typer.Context) -> State:
     if state is None:  # pragma: no cover - the root callback always sets it
         raise RuntimeError("agentlens CLI state is missing")
     return state
+
+
+def db_exists(ctx: typer.Context) -> bool:
+    """Whether the database chosen with ``--db`` / ``$AGENTLENS_DB`` exists (in-memory: no)."""
+    db = _state(ctx).db
+    return str(db) != _MEMORY and db.exists()
 
 
 @contextmanager
