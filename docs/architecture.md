@@ -40,7 +40,7 @@ src/agentlens/
   evals/         # Evaluator protocol, deterministic evaluators, judges, registry
   suite/         # Dataset loading (YAML), runner, experiments, baselines
   compare/       # Per-case diff, aggregate stats, bootstrap, gates
-  report/        # Report models + renderers: plain text, rich terminal, JSON, Markdown; HTML later
+  report/        # Report models + renderers: plain text, rich terminal, JSON, Markdown, HTML (Jinja2 templates)
   integrations/  # pytest plugin, GitHub PR comments, (optional) OpenTelemetry exporter, framework hooks
   cli/           # Typer CLI entrypoint (`agentlens`): run, compare, report, baseline, traces, github, ...
 examples/

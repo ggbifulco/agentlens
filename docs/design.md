@@ -1013,6 +1013,54 @@ Implementation notes — Markdown report and GitHub Action (`report/markdown.py`
   script was exercised locally against throwaway repositories for the baseline, new-suite and
   database modes).
 
+Implementation notes — HTML report (`src/agentlens/report/html.py`, `report/templates/`, #28, FR-C2):
+- **Format `html`** (`HtmlRenderer(runs=, baseline_runs=, title=)`, registered without runs;
+  `render_html(report, *, runs, baseline_runs, title)`). Report models carry aggregates only, so
+  the traces come from the runs passed alongside (`experiment_runs(store, exp)` or a `run_suite`
+  result): the renderer keeps the models unchanged (JSON reports stay small, no trace data in PR
+  comments) and the page degrades to aggregates when no runs are given. Alternative considered:
+  adding traces to `ComparisonReport` — it would bloat every `--json` file and the Markdown input.
+- **CLI**: `report EXPERIMENT --format html [-o FILE]` loads the experiment's runs;
+  `report FILE.json --format html` looks the report's experiments up by id in the database when
+  it exists (a note on stderr says which traces are missing: a CI artifact read elsewhere);
+  `compare ... --html FILE` writes it next to the usual output, with both sides' traces.
+- **Jinja2** (new runtime dependency, `jinja2>=3.1`, brings `markupsafe`): templates as package
+  data (`report.html.j2`, `_macros.html.j2`), `autoescape=True` and `StrictUndefined`, so every
+  value from users is HTML-escaped by default and a missing variable is an error, not an empty
+  string. Alternatives: `string.Template`/f-strings (no autoescaping: every interpolation would
+  need a manual `escape()`, easy to forget once and get an XSS) and building the DOM in Python.
+  `report.css`/`report.js` are packaged files inlined verbatim (not parsed as templates).
+- **Self-contained**: one file, inline `<style>`/`<script>`, no `src`/`href` to the network, no
+  web fonts (system font stack), no CDN — it opens offline, as a CI artifact or from email.
+  Light/dark via CSS variables and `prefers-color-scheme`.
+- **Page**: verdict (gates, else regressions), experiment metadata (suite, model, git sha), summary
+  cards (pass rate, cost, latency, steps), metrics table (n, baseline, candidate, Δ, Δ%, CI text
+  and a small CI-vs-0 bar, status), gates (pass/fail/skip, rule, actual, reason, notes), cases as
+  `<details>` (regressions first, then improvements, unchanged, added, removed; filter chips and
+  a search box) opening to baseline/candidate run cards side by side (pass/fail, latency, cost,
+  steps, tokens, each evaluator's score and reason, output preview, error). Per-case latency is
+  shown but not coloured (machine noise). Experiment reports list failing cases first.
+- **Trace viewer**: a modal `<dialog>` built by ~300 lines of vanilla JS from the embedded JSON,
+  only when a trace is opened (large experiments do not create thousands of DOM nodes up front).
+  Tree = the run plus its spans nested by `parent_id` (start-time order, computed in Python with
+  offsets/durations in ms relative to the earliest start, so no date parsing in JS); kind
+  badges; waterfall bar per span; collapse/expand per node and for all; clicking a span shows
+  timing, tokens, cost, error, and input/output/attributes pretty-printed with light syntax
+  colouring; errors red (also on the row). Unfinished spans run to the end. Deep links:
+  `report.html#trace-<id>` opens a trace.
+- **Escaping**: Jinja autoescaping for the markup; the traces are JSON in
+  `<script type="application/json">` with `<`, `>`, `&`, U+2028/9 written as `\uXXXX`
+  (`script_json`), so `</script>` or `<!--` in a trace cannot leave the block; non-finite floats
+  become `null`. The JS writes only through `textContent`/`createTextNode`. Tests render
+  `</script><script>alert(1)</script>` in every user field; it was also checked in Chromium (no
+  dialog, text shown literally).
+- **Tests** (`tests/report/test_html.py`): key content, a structural check with `html.parser`
+  (every element closed in order, exactly two scripts), self-containment (no `src`, only `#`
+  hrefs, no `http(s):`, no `url(`/`@import`), the payload tree (nesting, order, offsets,
+  unfinished spans, usage), escaping. The JS is not run in CI (no browser dependency); the
+  screenshots in `docs/images/` are regenerated with `scripts/html_report_demo.py` +
+  `scripts/screenshot_html_report.py` (Playwright, not a project dependency).
+
 - **Not yet**: `agentlens ui` (M6), the pairwise judge in `compare` (§7 note), user `config`
   values on `run` (Python API only).
 

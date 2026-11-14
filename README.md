@@ -17,7 +17,7 @@ AgentLens turns agent runs into a **statistically sound regression suite** that 
 - 🔁 **Replay** deterministically from cassettes, or live against a new model/prompt.
 - ⚖️ **Evaluate** with deterministic checks (tool sequence, JSON schema, budgets) and LLM-as-judge.
 - 📊 **Compare** experiments with paired-bootstrap confidence intervals, not just averages.
-- 🚦 **Gate** PRs in CI and post a report as a PR comment.
+- 🚦 **Gate** PRs in CI and post a report as a PR comment; browse traces in a self-contained HTML report.
 - 🔌 **Swappable models**: mock, OpenAI-compatible (OpenAI, Ollama, vLLM), Anthropic.
 
 ## Quick look: recording a trace
@@ -519,8 +519,8 @@ $ agentlens export traces.jsonl --experiment pr-123 && agentlens import traces.j
 | Command | What it does |
 |---|---|
 | `run SUITE [--name --model --repetitions --concurrency --timeout --gates --set-baseline -q --json PATH]` | Runs the suite, saves the experiment, prints a summary (per-run progress on stderr). `--gates` checks the absolute rules (`min`/`max`); `--set-baseline` marks the run as the suite's baseline unless a gate failed; `--json` also writes the report with the gate verdict. |
-| `compare --candidate X [--baseline Y --gates --resamples --seed --confidence --json PATH]` | Candidate vs baseline with bootstrap CIs. `--baseline` takes an id, a name (most recent) or `baseline` (the default: the marked baseline of the candidate's suite). `--json -` prints JSON instead of text. |
-| `report EXPERIMENT\|FILE [--format rich\|text\|json\|markdown] [-o PATH] [--marker KEY]` | An experiment's totals, metrics and failing cases, or a saved comparison (`run`/`compare --json`) re-rendered. `markdown` is the PR-comment report (see [GitHub Action](#github-action)); `html` arrives with #28. |
+| `compare --candidate X [--baseline Y --gates --resamples --seed --confidence --json PATH --html PATH]` | Candidate vs baseline with bootstrap CIs. `--baseline` takes an id, a name (most recent) or `baseline` (the default: the marked baseline of the candidate's suite). `--json -` prints JSON instead of text; `--html` also writes the [HTML report](#html-report). |
+| `report EXPERIMENT\|FILE [--format rich\|text\|json\|markdown\|html] [-o PATH] [--marker KEY]` | An experiment's totals, metrics and failing cases, or a saved comparison (`run`/`compare --json`) re-rendered. `markdown` is the PR-comment report (see [GitHub Action](#github-action)); `html` is the [HTML report](#html-report) with the traces from the database. |
 | `github comment --file REPORT.md [--marker KEY --pr N --repo OWNER/REPO]` | Posts the report on a pull request, or updates the comment carrying the marker (token in `$GITHUB_TOKEN`). |
 | `baseline set\|unset EXPERIMENT`, `baseline show [SUITE]` | Manage the per-suite baseline. |
 | `experiments ls`, `traces ls`, `traces show ID` | Browse the database. |
@@ -551,6 +551,39 @@ print(render(ComparisonReport(comparison=comparison), "rich"))   # pass rate ↓
 invalid suite or gates file, unknown experiment or trace, unreadable file), so a CI step can
 tell "the agent regressed" from "the check is misconfigured". `agentlens --help` and
 `agentlens COMMAND --help` document every option.
+
+### HTML report
+`agentlens compare ... --html report.html` (or `agentlens report EXPERIMENT --format html -o
+report.html`) writes **one self-contained HTML file**: CSS and JavaScript are inlined and nothing
+is loaded from the network, so it can be uploaded as a CI artifact or mailed. It has the verdict,
+the metrics table with confidence intervals, the gates, and every case with its runs **side by
+side** (baseline vs candidate: pass/fail, each evaluator's score and reason, cost, latency,
+steps); regressions come first and can be filtered. *View trace* opens the **span tree**:
+collapsible nested spans with kind badges and a timing waterfall, input/output/attributes as
+pretty-printed JSON, usage and cost, errors in red. The page follows the system's light/dark
+theme, and every value from your data is escaped.
+
+![HTML report: verdict, summary cards, metrics with confidence intervals](docs/images/html-report.png)
+![Trace viewer: span tree with waterfall and span details](docs/images/html-report-trace.png)
+
+From Python, pass the runs so the traces are embedded:
+
+```python
+from agentlens.compare import compare_runs
+from agentlens.report import ComparisonReport, render_html
+from agentlens.suite import Suite, run_suite
+
+cases = [{"id": f"q{i}", "input": f"hello {i}", "expected": f"HELLO {i}"} for i in range(5)]
+suite = Suite(name="demo", agent=str.upper, cases=cases, defaults={"evaluators": ["exact_match"]})
+base, cand = run_suite(suite), run_suite(suite.model_copy(update={"agent": str.lower}))
+report = ComparisonReport(comparison=compare_runs(base, cand))
+html = render_html(report, runs=cand.runs, baseline_runs=base.runs)
+open("report.html", "w", encoding="utf-8").write(html)
+```
+
+The screenshots come from `scripts/html_report_demo.py` (the `examples/ci_demo` suite run twice,
+the second time with a broken answer and an extra step) and `scripts/screenshot_html_report.py`
+(Playwright).
 
 ## GitHub Action
 `action.yml` at the root of this repository is a composite action that checks every pull request
