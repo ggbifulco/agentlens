@@ -106,6 +106,7 @@ nav:
       - Web UI: web-ui.md
       - OpenTelemetry: opentelemetry.md
       - Regression story: regression-story.md
+      - Releasing: releasing.md
   - Design:
       - Architecture: architecture.md
       - Detailed design: design.md
@@ -118,6 +119,7 @@ nav:
           - adr/0005-bootstrap-regression.md
           - adr/0006-ci-baseline.md
       - Development log: PROGRESS.md
+      - Changelog: changelog.md
   - API reference:
       - api/index.md
       - api/schema.md

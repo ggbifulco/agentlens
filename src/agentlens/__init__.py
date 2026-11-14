@@ -4,7 +4,7 @@ Record agent runs as traces, replay them deterministically, score them with
 deterministic checks and LLM-as-judge, and catch regressions in CI.
 """
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 from agentlens.evals import Evaluator, evaluator
 from agentlens.llm import get_client
