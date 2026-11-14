@@ -19,8 +19,10 @@ suite), else ``$AGENTLENS_MODEL``, else :data:`DEFAULT_MODEL`. Any ``mock``
 spec (``mock``, ``mock:support``) runs the scripted policy of
 :mod:`.mock_policy`, so the agent works with no API keys.
 
-The system prompt lives in ``prompts/system_<PROMPT_VERSION>.txt``: change
-:data:`PROMPT_VERSION` (or the file) to see a prompt change in AgentLens.
+The system prompt lives in ``prompts/system_<version>.txt``. The version is
+``prompt_version=``, else ``$SUPPORT_PROMPT_VERSION``, else :data:`PROMPT_VERSION`:
+``SUPPORT_PROMPT_VERSION=v2 agentlens run examples/support_agent/suite.yaml`` runs
+the regressed ``v2`` prompt of ``docs/regression-story.md`` without editing code.
 """
 
 from __future__ import annotations
@@ -41,13 +43,18 @@ __all__ = [
     "GIVE_UP_MESSAGE",
     "MAX_ITERATIONS",
     "PROMPT_VERSION",
+    "PROMPT_VERSION_ENV",
     "build_llm",
+    "resolve_prompt_version",
     "run_agent",
     "system_prompt",
 ]
 
 PROMPT_VERSION = "v1"
-"""Which ``prompts/system_<version>.txt`` the agent uses."""
+"""Which ``prompts/system_<version>.txt`` the agent uses by default."""
+
+PROMPT_VERSION_ENV = "SUPPORT_PROMPT_VERSION"
+"""Environment variable overriding :data:`PROMPT_VERSION` (e.g. ``v2``) without editing code."""
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
@@ -69,6 +76,11 @@ def system_prompt(version: str = PROMPT_VERSION) -> str:
     return (PROMPTS_DIR / f"system_{version}.txt").read_text(encoding="utf-8").strip()
 
 
+def resolve_prompt_version(version: str | None = None) -> str:
+    """``version``, else ``$SUPPORT_PROMPT_VERSION``, else :data:`PROMPT_VERSION`."""
+    return version or os.environ.get(PROMPT_VERSION_ENV) or PROMPT_VERSION
+
+
 def build_llm(model: str | None = None) -> LLMClient:
     """The client for ``model`` (else ``$AGENTLENS_MODEL``, else :data:`DEFAULT_MODEL`).
 
@@ -87,7 +99,7 @@ def run_agent(
     model: str | None = None,
     *,
     llm: LLMClient | None = None,
-    prompt_version: str = PROMPT_VERSION,
+    prompt_version: str | None = None,
     max_iterations: int = MAX_ITERATIONS,
 ) -> str:
     """Answer one customer message, using the tools as needed (the suite's agent).
@@ -97,7 +109,7 @@ def run_agent(
         model: ``"provider:model"`` spec (see :func:`build_llm`); ``agentlens run``
             passes the suite's/CLI's model here.
         llm: A ready client, instead of ``model`` (tests, custom setups).
-        prompt_version: Which system prompt to use.
+        prompt_version: Which system prompt to use (see :func:`resolve_prompt_version`).
         max_iterations: Most model calls before giving up with :data:`GIVE_UP_MESSAGE`.
 
     Returns:
@@ -105,7 +117,10 @@ def run_agent(
     """
     client = agentlens.wrap_llm(llm if llm is not None else build_llm(model))
     tools = make_tools(new_database())
-    messages = [Message.system(system_prompt(prompt_version)), Message.user(question)]
+    messages = [
+        Message.system(system_prompt(resolve_prompt_version(prompt_version))),
+        Message.user(question),
+    ]
     for _ in range(max_iterations):
         request = LLMRequest(messages=messages, tools=TOOL_SPECS, temperature=0)
         response = client.complete(request)

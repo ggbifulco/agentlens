@@ -577,3 +577,21 @@ Append-only log of development sessions (newest at the bottom).
   isolation, prompt-change regression, loop/tool edge cases, optional `live` run. No new
   dependencies. 1730 tests, 100% coverage of `agentlens`.
 - Next: #30 End-to-end test and regression story in CI.
+
+## 2026-11-14 — #30 End-to-end test and regression story in CI
+- Resumed an interrupted session (branch `test/30-regression-story`, 4 commits, no PR).
+- Example: the support agent selects its prompt with `prompt_version=` / `$SUPPORT_PROMPT_VERSION`
+  (default `v1`); new `prompts/system_v2.txt` ("simplified", drops the $200 refund limit) and
+  `gates.yaml` (`success_rate` min 0.95 / min_delta 0, `case_regressions` max 0, `steps`
+  max_delta_pct 10, `cost` max_delta_pct 20, `min_cases` 20).
+- `tests/e2e/test_regression_story.py`: v1 baseline -> v2 candidate -> compare -> gates exit 1,
+  regressed cases `refund-over-limit` and `multi-broken-over-limit` named in every report format;
+  once through the Python API, once through the CLI as CI runs it.
+- `.github/workflows/agentlens.yml`: `regression-check` (PR base vs PR, report comment, fails on a
+  gate) and `expected-failure` (replays the story on every run; passes only if compare exits 1
+  and names both cases). Sample branch `demo/regression-story` (draft PR #65, closed) showed the
+  gate failing on a real PR.
+- Docs: new `docs/regression-story.md` (before/after trajectory, real report, why the gates catch
+  what the bootstrap CI alone calls noise at n=27), linked from README and the example README.
+- No new dependencies. 1734 tests, 100% coverage.
+- Next: M6 P2 issues (#31 local web UI, #32 OpenTelemetry exporter), then M7 release.

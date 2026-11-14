@@ -1,0 +1,8 @@
+# Quality gates for the support-desk agent (what CI enforces on every pull request).
+# The mock model is deterministic, so any drop is a real behaviour change, not noise.
+# Latency is measured, not scripted, so it is not gated here.
+success_rate: {min: 0.95, min_delta: 0}  # >= 95% of the runs pass, and no fewer than on the base
+case_regressions: {max: 0}               # no case that passed on the base branch may fail now
+steps: {max_delta_pct: 10}               # at most 10% more LLM calls per case on average
+cost: {max_delta_pct: 20}                # at most 20% more spend (always $0 with the mock)
+options: {min_cases: 20}

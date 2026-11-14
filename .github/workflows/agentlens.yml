@@ -1,22 +1,33 @@
-# Runs this repository's own GitHub Action (action.yml) on the CI demo suite: the PR's base
-# commit is the baseline, the PR is the candidate, and the report is posted as a PR comment
-# (updated in place on every push).
+# AgentLens on AgentLens: the example support-desk agent (examples/support_agent) is checked on
+# every pull request with this repository's own GitHub Action (action.yml).
+#
+# - regression-check: the PR's base commit is the baseline, the PR is the candidate; the report
+#   is posted as a PR comment (updated in place on every push) and the job fails when a gate in
+#   examples/support_agent/gates.yaml fails.
+# - expected-failure: the regression story of docs/regression-story.md, on every run. The suite
+#   runs with the reviewed v1 prompt (baseline) and with the "simplified" v2 prompt that drops
+#   the refund limit (candidate); the job passes only if `agentlens compare` exits with 1 and
+#   names the regressed cases, i.e. it proves that the gate keeps catching that regression.
 name: AgentLens
 
 on:
   pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
   pull-requests: write
 
 concurrency:
-  group: agentlens-${{ github.event.pull_request.number }}
+  group: agentlens-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   regression-check:
-    name: AgentLens regression check (demo suite)
+    name: AgentLens regression check (support agent)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -25,11 +36,65 @@ jobs:
         id: agentlens
         uses: ./
         with:
-          suite: examples/ci_demo/suite.yaml
-          gates: examples/ci_demo/gates.yaml
-          marker: agentlens-report:ci-demo
+          suite: examples/support_agent/suite.yaml
+          gates: examples/support_agent/gates.yaml
+          marker: agentlens-report:support-agent
       - name: Outputs
         if: ${{ !cancelled() }}
         run: |
           echo "passed=${{ steps.agentlens.outputs.passed }}"
           echo "report=${{ steps.agentlens.outputs.report-path }}"
+
+  expected-failure:
+    name: AgentLens catches a prompt regression (expected failure)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      UV_LOCKED: "1"
+      NO_COLOR: "1"
+      DB: .agentlens/regression-story.db
+      SUITE: examples/support_agent/suite.yaml
+      GATES: examples/support_agent/gates.yaml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install AgentLens
+        run: uv sync
+      - name: Baseline (reviewed v1 prompt)
+        env:
+          SUPPORT_PROMPT_VERSION: v1
+        run: uv run agentlens --db "$DB" run "$SUITE" --name prompt-v1 --set-baseline -q
+      - name: Candidate (regressed v2 prompt)
+        env:
+          SUPPORT_PROMPT_VERSION: v2
+        run: uv run agentlens --db "$DB" run "$SUITE" --name prompt-v2 -q
+      - name: Compare; the gates must fail with exit code 1
+        run: |
+          set +e
+          uv run agentlens --db "$DB" compare --candidate prompt-v2 --gates "$GATES" \
+            --json report.json > compare.txt
+          code=$?
+          set -e
+          cat compare.txt
+          {
+            echo "## Expected failure: the regression story"
+            echo
+            echo "\`agentlens compare\` exited with **$code** (expected 1)."
+            echo
+            uv run agentlens report report.json --format markdown \
+              --marker agentlens-report:expected-failure
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 1 ]; then
+            echo "::error::expected the gates to fail with exit code 1, got $code"
+            exit 1
+          fi
+          for case_id in refund-over-limit multi-broken-over-limit; do
+            if ! grep -q "$case_id" compare.txt; then
+              echo "::error::regressed case $case_id is not in the report"
+              exit 1
+            fi
+          done
+          echo "::notice::AgentLens caught the prompt regression (exit 1), as expected"

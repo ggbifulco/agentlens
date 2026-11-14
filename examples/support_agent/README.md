@@ -7,13 +7,15 @@ keys) through a scripted mock model, and unchanged against a real model.
 ```
 examples/support_agent/
   agent.py             # run_agent(question, model=None): the tool-calling loop
-  prompts/system_v1.txt  # the system prompt (PROMPT_VERSION = "v1" in agent.py)
+  prompts/system_v1.txt  # the reviewed system prompt (default)
+  prompts/system_v2.txt  # the "simplified" prompt of the regression story ($SUPPORT_PROMPT_VERSION=v2)
   tools.py             # the 6 tools, their JSON-schema specs, safe tool execution
   data.py              # in-memory customers, orders and FAQ ("today" is 2026-11-01)
   mock_policy.py       # the offline "model": mock:support
   cases.yaml           # the golden dataset
   suite.yaml           # deterministic suite (what CI runs)
   suite.judges.yaml    # same dataset + an llm_rubric judge (needs a judge model)
+  gates.yaml           # the quality gates CI enforces on pull requests
 ```
 
 ## Run it
@@ -96,6 +98,10 @@ The refund limit ("up to $200") and window ("within 30 days of delivery") are **
 system prompt**, so the mock reacts to prompt changes the way a model would. Try it: delete
 "of up to $200" from `prompts/system_v1.txt` and run the suite again — `refund-over-limit` and
 `multi-broken-over-limit` now refund the $899 laptop instead of escalating, and fail.
+
+That change ships as `prompts/system_v2.txt`: set `SUPPORT_PROMPT_VERSION=v2` to run the agent
+with it. [docs/regression-story.md](../../docs/regression-story.md) walks through how the
+comparison and the gates in `gates.yaml` catch it, locally and in CI.
 
 ## The golden dataset
 
