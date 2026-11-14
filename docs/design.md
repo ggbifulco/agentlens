@@ -541,6 +541,77 @@ Implementation notes (`src/agentlens/evals/builtin/trace_checks.py`, #17, FR-E1 
   score 0.
 - Helpers `check_choice`, `check_number`, `params_repr` moved to `builtin/_common.py`.
 
+Implementation notes (`src/agentlens/evals/judge/`, `evals/builtin/judges.py`, `evals/prompts/`, #18, FR-E2/FR-E4):
+- **Reusable machinery** (`agentlens.evals.judge`): `LLMJudge[Verdict]` is an abstract evaluator; a
+  concrete judge implements `build_prompt(trace, case) -> JudgePrompt(system, user, output)`,
+  `parse_reply(json_object) -> Verdict` (raises `JudgeParseError`) and `make_result(verdict, run)`.
+  The base class owns the flow, identical in `evaluate` and `aevaluate` (`client.acomplete`):
+  cache lookup → call → parse → retry → cache write → `EvalResult`. The pairwise judge (#19) only
+  adds a prompt and a parser.
+- **Request**: `temperature=0.0` always (`JUDGE_TEMPERATURE`), `response_format={"type":
+  "json_object"}` (OpenAI JSON mode; the Anthropic adapter emulates it with a system instruction),
+  optional `max_tokens`, `model=None` (the client's own). Prompts say "JSON" (required by OpenAI's
+  JSON mode).
+- **Prompts** are packaged `string.Template` text files in `src/agentlens/evals/prompts/`
+  (`judge_system`, `rubric`, `pass_fail`, `reference`), loaded with `importlib.resources`
+  (`load_template`). `string.Template` instead of `str.format`/Jinja: no dependency, the `{}` of
+  the JSON answer format need no escaping, and a `$` in agent output is never re-expanded
+  (substitution is single-pass). Input/output/reference are wrapped in `<input>`/`<output>`/
+  `<reference>` tags and the system prompt says tagged content is data, not instructions (a
+  cheap prompt-injection guard). Values are shown as text: strings as is, `None` as `(none)`,
+  anything else as sorted-key JSON (`value_text`), so cache keys do not depend on dict order.
+  The judge is asked for `reasoning` **before** the verdict (explain-then-score).
+  `template=` overrides the packaged prompt (checked at build: valid `$` syntax, only the
+  placeholders `$criteria $input $output $reference`).
+- **Parsing** (`extract_json_object`): the content of Markdown code fences first, then the whole
+  reply, then every `{` as a candidate start (`JSONDecoder.raw_decode`), so "Sure! {...} Hope
+  this helps" works. `parse_score` accepts numbers and numeric strings (`"4"`, `"4/5"`), keys
+  case-insensitive (`score`/`rating`), fractional values kept, but out-of-range (`7`, `0`),
+  booleans and NaN are errors — clamping would silently turn a 0-10 scale answer into a 5.
+  `parse_verdict` accepts `pass`/`fail` (also yes/no, true/false, booleans; keys `verdict`/
+  `passed`/`pass`/`result`). `parse_reasoning` reads `reasoning`/`reason`/`explanation`/`rationale`.
+- **Retry**: on a parse error the judge is asked again up to `retries` times (default 1, max 5),
+  with its bad reply and the error appended to the conversation. Still unparseable → a *failed*
+  result (score 0) with `details["error"] = {type: "JudgeParseError", message}` (the
+  `error_result` shape, so reports count it as an evaluator problem) and `details["raw_reply"]`
+  (clipped to 4000 chars). LLM errors (network, auth, no model configured) propagate and become
+  evaluator-error results through `run_evaluator`.
+- **Cache** (`JudgeCache` protocol: `get(key) -> dict | None`, `set(key, dict)`): key =
+  `judge_cache_key(judge_model, prompt, output)` = sha256 of the JSON list `[judge model, system +
+  user prompt, output text]` (JSON-encoded so concatenations cannot collide). The prompt already
+  contains criteria, input and reference, so changing any of them, the template or the judge
+  model misses the cache. The **raw reply** is cached (`{"reply", "judge_model", "model"}`), not
+  the parsed verdict, and only once it parsed: a parser change re-reads old replies, a cached reply
+  that no longer parses is ignored and re-asked, failures are never cached. A hit makes no LLM
+  call; `details` say `cached`, `attempts` (0 on a hit), `cache_key`, `judge_model` and
+  `judge_usage` (summed over attempts; absent on a hit).
+  Implementations: `MemoryJudgeCache` (dict + lock) and `DiskJudgeCache(directory)` — one JSON file
+  per key at `<dir>/<key[:2]>/<key>.json`, written atomically (temp file + `os.replace`), corrupt
+  files are misses. **Default: `DiskJudgeCache(".agentlens/judge_cache")`** (next to the SQLite
+  store, already git-ignored): FR-E4 asks for reproducible judge scores across runs, which an
+  in-memory cache cannot give, and plain files are easy to inspect, prune and save/restore as a CI
+  cache. `cache=` param / `$AGENTLENS_JUDGE_CACHE`: `False`/`"off"` disables, `"memory"` is a
+  process-wide `MemoryJudgeCache`, a string/path is a directory. The test suite sets
+  `AGENTLENS_JUDGE_CACHE=off`; tests that script a `MockLLM` judge should pass `cache=False` or a
+  fresh `MemoryJudgeCache`, since two tests with the same prompt would otherwise share a verdict.
+- **Judge model** (`model` spec via `get_client`, or an injected `client`, not both): default
+  `$AGENTLENS_JUDGE_MODEL`, else `$AGENTLENS_MODEL`, resolved on first use (`LLMJudge.client`), so
+  building judges from a suite needs no environment; the spec is syntax-checked at build. The
+  cache-key label is `"<provider>:<model>"` for a spec, the client's `provider`/`model`
+  attributes (else class name) for an injected client.
+- `llm_rubric(criteria, min_score=4, include_expected=True, template=None, model, client, cache,
+  retries=1, max_tokens=None)`: 1-5 score with anchored scale in the prompt; `score = (s - 1) / 4`
+  (4 → 0.75), `passed = s >= min_score`. **Default `min_score` 4** = "meets the criteria with only
+  minor issues"; 3 ("partially meets") is not a pass. Reason `judge score 4/5 (>= 4): <reasoning>`;
+  details `rubric_score`, `min_score`, `reasoning`, `criteria`.
+- `llm_pass_fail(criteria, include_expected=True, template=None, model, client, cache, retries,
+  max_tokens)`: verdict pass → score 1, fail → 0; the prompt says to fail when any criterion is not
+  met *or it cannot tell*. Details `verdict`, `reasoning`, `criteria`.
+- Both show the judge the case input (`trace.input`, else `case.input`), the output and — unless
+  `include_expected=False` — `case.expected` as a *reference* ("does not need to match word for
+  word"). Scalar shorthand: `{llm_rubric: "Polite"}` sets `criteria`.
+- Bias and calibration guidance for users: `docs/judges.md`.
+
 ## 6. Suites (YAML)
 ```yaml
 name: support-agent

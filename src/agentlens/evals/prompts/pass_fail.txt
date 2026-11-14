@@ -1,0 +1,19 @@
+Decide whether the agent's output meets ALL of the criteria below.
+
+<criteria>
+$criteria
+</criteria>
+
+<input>
+$input
+</input>
+
+<output>
+$output
+</output>
+$reference
+The verdict is "pass" only if every criterion is met; if any criterion is not met, or you cannot tell from the output, the verdict is "fail".
+
+First explain your judgement in one to three sentences, citing the output, then give the verdict.
+Reply with only this JSON object:
+{"reasoning": "<your explanation>", "verdict": "pass" or "fail"}

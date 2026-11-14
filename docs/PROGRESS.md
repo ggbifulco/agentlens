@@ -302,3 +302,27 @@ Append-only log of development sessions (newest at the bottom).
   Tests use a synthetic-trace builder (`tests/evals/builtin/conftest.py::build_trace`).
 - No new dependencies. 954 tests, 100% coverage; README example verified.
 - Next: #18 LLM-as-judge evaluators (rubric 1-5, pass/fail) with caching.
+
+## 2026-11-13 — #18 LLM-as-judge evaluators (rubric 1-5, pass/fail) with caching
+- Added `agentlens.evals.judge` (reusable for #19): `LLMJudge[Verdict]` abstract evaluator
+  (subclasses define `build_prompt`, `parse_reply`, `make_result`; the base does cache lookup →
+  call at `temperature=0` with `response_format={"type": "json_object"}` → parse → retry
+  (`retries=1`, bad reply fed back) → cache write, in both `evaluate` and `aevaluate`),
+  `JudgePrompt`, `JudgeRun`, `value_text`; parsing helpers `extract_json_object` (code fences,
+  prose, first `{`), `parse_score` (numeric strings, `"4/5"`, range-checked, no clamping),
+  `parse_verdict`, `parse_reasoning`, `JudgeParseError`; prompts `load_template`/`render_template`/
+  `check_template` over packaged `string.Template` files in `evals/prompts/` (`judge_system`,
+  `rubric`, `pass_fail`, `reference`).
+- Cache: `JudgeCache` protocol, `MemoryJudgeCache`, `DiskJudgeCache` (JSON file per key, atomic
+  writes), `judge_cache_key` = sha256 of `[judge model, prompt, output]`, `resolve_cache`. Default
+  on disk at `.agentlens/judge_cache/`; `cache=`/`$AGENTLENS_JUDGE_CACHE` = off | memory | path.
+  The raw reply is cached only after it parsed.
+- Evaluators (registered, re-exported from `agentlens.evals`): `LLMRubric` (`llm_rubric`, primary
+  `criteria`, `min_score=4`, score `(s-1)/4`) and `LLMPassFail` (`llm_pass_fail`), both with
+  `include_expected`, `template`, `model`/`client`, `cache`, `retries`, `max_tokens`. Judge model
+  from `model`, else `$AGENTLENS_JUDGE_MODEL`, else `$AGENTLENS_MODEL`, resolved lazily.
+  Unparseable reply → failed result with `details.raw_reply` and `details.error`.
+- Docs: design §5 implementation notes, new `docs/judges.md` (usage, caching, position/verbosity/
+  self-preference bias, calibration against human labels), README "LLM judges" example (verified).
+- No new dependencies. 1131 tests, 100% coverage.
+- Next: #19 Pairwise A/B judge.

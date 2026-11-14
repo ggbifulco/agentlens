@@ -1,0 +1,24 @@
+Evaluate the agent's output against the criteria below and give it a score from 1 to 5.
+
+<criteria>
+$criteria
+</criteria>
+
+<input>
+$input
+</input>
+
+<output>
+$output
+</output>
+$reference
+Scoring scale (use the whole scale):
+5 - fully meets every criterion; nothing important is missing or wrong.
+4 - meets the criteria with only minor issues.
+3 - partially meets the criteria; a noticeable part is missing or wrong.
+2 - mostly fails the criteria; only small parts are acceptable.
+1 - does not meet the criteria at all, or is wrong, harmful or off-topic.
+
+First explain your judgement in one to three sentences, citing the output, then give the score.
+Reply with only this JSON object:
+{"reasoning": "<your explanation>", "score": <integer from 1 to 5>}
