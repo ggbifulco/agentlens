@@ -365,9 +365,10 @@ class UIApp:
             needs it, and never created: while it does not exist, pages say so
             (status 503) instead of creating an empty database.
         gates: Gates checked on every comparison page (optional).
-        resamples, seed, confidence: Bootstrap defaults of the comparisons
-            (the same as ``agentlens compare``); ``/compare`` takes them as
-            query parameters too.
+        resamples: Bootstrap resamples of the comparisons (the same default as
+            ``agentlens compare``); ``/compare`` takes it as a query parameter too.
+        seed: Bootstrap seed, as ``resamples``.
+        confidence: Confidence level of the intervals, as ``resamples``.
     """
 
     def __init__(

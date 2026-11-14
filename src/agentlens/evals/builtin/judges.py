@@ -151,7 +151,9 @@ class LLMRubric(_CriteriaJudge[RubricVerdict]):
         include_expected: Show ``case.expected`` to the judge as a reference.
         template: Custom prompt text with ``$criteria``, ``$input``, ``$output``,
             ``$reference`` placeholders (it must still ask for ``score``/``reasoning`` JSON).
-        model, client, cache, retries, max_tokens: See :class:`~agentlens.evals.judge.LLMJudge`.
+
+    ``model``, ``client``, ``cache``, ``retries`` and ``max_tokens`` are as in
+    :class:`~agentlens.evals.judge.LLMJudge`.
     """
 
     name: str = "llm_rubric"
@@ -235,7 +237,9 @@ class LLMPassFail(_CriteriaJudge[PassFailVerdict]):
         include_expected: Show ``case.expected`` to the judge as a reference.
         template: Custom prompt text (same placeholders as :class:`LLMRubric`; it
             must ask for ``verdict``/``reasoning`` JSON).
-        model, client, cache, retries, max_tokens: See :class:`~agentlens.evals.judge.LLMJudge`.
+
+    ``model``, ``client``, ``cache``, ``retries`` and ``max_tokens`` are as in
+    :class:`~agentlens.evals.judge.LLMJudge`.
     """
 
     name: str = "llm_pass_fail"

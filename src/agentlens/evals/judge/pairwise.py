@@ -310,7 +310,9 @@ class PairwiseJudge(BaseJudge[PairwiseVerdict]):
         include_expected: Show ``case.expected`` to the judge as a reference.
         template: Custom prompt with ``$criteria``, ``$input``, ``$output_1``,
             ``$output_2`` and ``$reference`` (it must ask for ``winner``/``reasoning`` JSON).
-        model, client, cache, retries, max_tokens: See :class:`~agentlens.evals.judge.BaseJudge`.
+
+    ``model``, ``client``, ``cache``, ``retries`` and ``max_tokens`` are as in
+    :class:`~agentlens.evals.judge.BaseJudge`.
 
     Raises:
         EvaluatorConfigError: for invalid parameters.
