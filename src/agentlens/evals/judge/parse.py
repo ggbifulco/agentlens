@@ -65,12 +65,11 @@ def extract_json_object(text: str | None) -> dict[str, JsonValue]:
         start = candidate.find("{")
         while start != -1:
             try:
-                value, _ = decoder.raw_decode(candidate, start)
+                obj, _ = decoder.raw_decode(candidate, start)
             except ValueError:
                 pass
             else:
-                if isinstance(value, dict):
-                    return value
+                return dict(obj)  # decoding from a "{" always yields an object
             start = candidate.find("{", start + 1)
     raise JudgeParseError("no JSON object found in the judge's reply")
 
