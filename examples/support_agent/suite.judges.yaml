@@ -1,0 +1,17 @@
+# The same golden dataset plus an LLM judge on every answer. Needs a judge model:
+#   AGENTLENS_JUDGE_MODEL=openai:gpt-4o-mini agentlens run examples/support_agent/suite.judges.yaml
+# Kept separate from suite.yaml so the default suite (and CI) runs offline.
+name: support-agent-judged
+description: Support-desk golden dataset with an llm_rubric judge on top of the deterministic checks.
+agent: examples.support_agent:run_agent
+repetitions: 1
+defaults:
+  evaluators:
+    - no_error
+    - {max_steps: 6}
+    - llm_rubric:
+        criteria: >-
+          Polite and concise; answers exactly what the customer asked; states concrete facts
+          (order number, amounts, dates, ticket number) without inventing any; when it cannot
+          help it says why and what happens next.
+cases: cases.yaml

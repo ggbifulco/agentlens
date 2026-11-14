@@ -1,0 +1,231 @@
+# Golden dataset for the support-desk agent: 27 cases.
+# `expected.tools` is what `tool_sequence` checks (ordered: these tools in this order; extra calls
+# allowed unless `forbidden` or `mode: strict`). `contains`/`regex` check the facts the answer must
+# state; they are case-insensitive so that a real model's wording also passes.
+# Order data: examples/support_agent/data.py ("today" is 2026-11-01).
+
+# --- refunds -----------------------------------------------------------------------------------
+- id: refund-simple
+  input: "I want a refund for order 1001"
+  expected: {tools: [lookup_order, issue_refund]}
+  tags: [refund]
+  evaluators:
+    - tool_sequence
+    - {contains: {text: ["1001", "$49.99"], case_sensitive: false}}
+    - {regex: {pattern: "refund", ignore_case: true}}
+
+- id: refund-paraphrase
+  input: "Hi, the mouse from order #1001 is broken, can I get my money back?"
+  expected: {tools: [lookup_order, issue_refund]}
+  tags: [refund]
+  evaluators:
+    - tool_sequence
+    - {contains: {text: ["$49.99"], case_sensitive: false}}
+
+- id: refund-over-limit
+  input: "Please refund order 1004, the laptop is faulty"
+  expected: {tools: [lookup_order, escalate_to_human]}
+  tags: [refund, policy, escalation]
+  evaluators:
+    - {tool_sequence: {forbidden: [issue_refund]}}
+    - {contains: {text: ["1004", "ESC-1001"], case_sensitive: false}}
+    - {regex: {pattern: "\\$200", ignore_case: true}}
+
+- id: refund-outside-window
+  input: "I'd like a refund for order 1005"
+  expected: {tools: [lookup_order]}
+  tags: [refund, policy]
+  evaluators:
+    - {tool_sequence: {forbidden: [issue_refund]}}
+    - {contains: {text: ["1005", "30 days"], case_sensitive: false}}
+
+- id: refund-already-refunded
+  input: "Refund order 1007"
+  expected: {tools: [lookup_order]}
+  tags: [refund, policy]
+  evaluators:
+    - {tool_sequence: {forbidden: [issue_refund]}}
+    - {regex: {pattern: "already (been )?refunded", ignore_case: true}}
+
+- id: refund-not-delivered
+  input: "Refund order 1002 please"
+  expected: {tools: [lookup_order]}
+  tags: [refund, policy]
+  evaluators:
+    - {tool_sequence: {forbidden: [issue_refund]}}
+    - {regex: {pattern: "not (been |yet )*delivered|hasn't (been )?delivered|not arrived", ignore_case: true}}
+
+- id: refund-cancelled-order
+  input: "Can I get a refund for order 1008?"
+  expected: {tools: [lookup_order]}
+  tags: [refund, policy]
+  evaluators:
+    - {tool_sequence: {forbidden: [issue_refund]}}
+    - {contains: {text: ["cancelled"], case_sensitive: false}}
+
+- id: refund-unknown-order
+  input: "Refund order 9999"
+  expected: {tools: [lookup_order]}
+  tags: [refund, unknown-order]
+  evaluators:
+    - {tool_sequence: {forbidden: [issue_refund]}}
+    - {regex: {pattern: "(couldn't|could not|can't|cannot|unable to) find.*9999|9999.*not (be )?found", ignore_case: true}}
+
+- id: refund-missing-order-number
+  input: "I want a refund"
+  expected: {tools: []}
+  tags: [refund, clarification]
+  evaluators:
+    - {tool_sequence: {mode: strict}}
+    - {contains: {text: ["order number"], case_sensitive: false}}
+
+# --- tracking ----------------------------------------------------------------------------------
+- id: track-shipped
+  input: "Where is my order 1002?"
+  expected: {tools: [track_order]}
+  tags: [tracking]
+  evaluators:
+    - tool_sequence
+    - {contains: {text: ["UPS", "2026-11-04"], case_sensitive: false}}
+
+- id: track-delayed
+  input: "Order 1006 still hasn't arrived"
+  expected: {tools: [track_order]}
+  tags: [tracking]
+  evaluators:
+    - tool_sequence
+    - {contains: {text: ["delayed", "2026-11-06"], case_sensitive: false}}
+
+- id: track-delivered
+  input: "Track order 1001"
+  expected: {tools: [track_order]}
+  tags: [tracking]
+  evaluators:
+    - tool_sequence
+    - {contains: {text: ["delivered", "2026-10-20"], case_sensitive: false}}
+
+- id: track-unknown-order
+  input: "Where is order 4242?"
+  expected: {tools: [track_order]}
+  tags: [tracking, unknown-order]
+  evaluators:
+    - tool_sequence
+    - {regex: {pattern: "(couldn't|could not|can't|cannot|unable to) find.*4242|4242.*not (be )?found", ignore_case: true}}
+
+- id: track-missing-order-number
+  input: "Where is my package?"
+  expected: {tools: []}
+  tags: [tracking, clarification]
+  evaluators:
+    - {tool_sequence: {mode: strict}}
+    - {contains: {text: ["order number"], case_sensitive: false}}
+
+# --- address changes ---------------------------------------------------------------------------
+- id: address-change
+  input: "Please change the shipping address for order 1003 to 12 Via Garibaldi, Torino"
+  expected: {tools: [lookup_order, update_address]}
+  tags: [address]
+  evaluators:
+    - tool_sequence
+    - {contains: {text: ["1003", "12 Via Garibaldi"], case_sensitive: false}}
+
+- id: address-change-already-shipped
+  input: "Can you change the address of order 1002 to 4 High Street, Leeds?"
+  expected: {tools: [lookup_order]}
+  tags: [address, policy]
+  evaluators:
+    - {tool_sequence: {forbidden: [update_address]}}
+    - {regex: {pattern: "(already|has) shipped|no longer|can't|cannot", ignore_case: true}}
+
+- id: address-change-missing-address
+  input: "I need to change the address for order 1003"
+  expected: {tools: []}
+  tags: [address, clarification]
+  evaluators:
+    - {tool_sequence: {forbidden: [update_address]}}
+    - {contains: {text: ["address"], case_sensitive: false}}
+    - {regex: {pattern: "\\?", ignore_case: true}}
+
+# --- store policies (FAQ) ----------------------------------------------------------------------
+- id: faq-returns
+  input: "What is your return policy?"
+  expected: {tools: [search_faq]}
+  tags: [faq]
+  evaluators:
+    - tool_sequence
+    - {contains: {text: ["30 days"], case_sensitive: false}}
+
+- id: faq-international
+  input: "Do you ship to Canada?"
+  expected: {tools: [search_faq]}
+  tags: [faq]
+  evaluators:
+    - tool_sequence
+    - {contains: {text: ["Canada"], case_sensitive: false}}
+
+- id: faq-payment
+  input: "Which payment methods do you accept?"
+  expected: {tools: [search_faq]}
+  tags: [faq]
+  evaluators:
+    - tool_sequence
+    - {contains: {text: ["PayPal"], case_sensitive: false}}
+
+- id: faq-warranty
+  input: "How long is the warranty on electronics?"
+  expected: {tools: [search_faq]}
+  tags: [faq]
+  evaluators:
+    - tool_sequence
+    - {regex: {pattern: "2[- ]year", ignore_case: true}}
+
+# --- escalation --------------------------------------------------------------------------------
+- id: escalate-human
+  input: "I want to talk to a human"
+  expected: {tools: [escalate_to_human]}
+  tags: [escalation]
+  evaluators:
+    - tool_sequence
+    - {regex: {pattern: "ESC-\\d+", ignore_case: false}}
+
+- id: escalate-manager-with-order
+  input: "This is unacceptable, I want to speak to a manager about order 1006"
+  expected: {tools: [escalate_to_human]}
+  tags: [escalation]
+  evaluators:
+    - tool_sequence
+    - {regex: {pattern: "ESC-\\d+", ignore_case: false}}
+
+# --- multi-step --------------------------------------------------------------------------------
+- id: multi-track-and-refund
+  input: "Where is order 1002? Also I want a refund for order 1001."
+  expected: {tools: [track_order, lookup_order, issue_refund]}
+  tags: [multi-step, tracking, refund]
+  evaluators:
+    - {tool_sequence: {mode: subset}}
+    - {contains: {text: ["UPS", "$49.99"], case_sensitive: false}}
+
+- id: multi-address-and-faq
+  input: "Change the address of order 1009 to 3 Corso Italia, Napoli and tell me how long shipping takes"
+  expected: {tools: [lookup_order, update_address, search_faq]}
+  tags: [multi-step, address, faq]
+  evaluators:
+    - {tool_sequence: {mode: subset}}
+    - {contains: {text: ["3 Corso Italia", "3-5 business days"], case_sensitive: false}}
+
+- id: multi-broken-over-limit
+  input: "My order 1004 arrived broken. I want my money back."
+  expected: {tools: [lookup_order, escalate_to_human]}
+  tags: [multi-step, refund, policy, escalation]
+  evaluators:
+    - {tool_sequence: {forbidden: [issue_refund]}}
+    - {contains: {text: ["1004", "ESC-"], case_sensitive: false}}
+
+# --- off-topic ---------------------------------------------------------------------------------
+- id: off-topic
+  input: "What's the weather in Rome?"
+  expected: {tools: []}
+  tags: [off-topic]
+  evaluators:
+    - {tool_sequence: {forbidden: [lookup_order, issue_refund, track_order, update_address, escalate_to_human]}}
+    - {regex: {pattern: "only help|can't help|cannot help|unable to help", ignore_case: true}}
