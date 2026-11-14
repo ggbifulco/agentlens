@@ -371,6 +371,52 @@ with SQLiteStore("runs.db") as store:
 Each trace carries `case_id`, `repetition`, `suite` and `experiment` metadata; `arun_suite` is the
 `async` version, and `progress=lambda result, done, total: ...` reports each finished run.
 
+### Comparing experiments
+`compare_experiments` pairs two experiments by case id and reports, per case and in aggregate,
+the change (candidate − baseline) in pass rate, mean score per evaluator, cost, latency and steps.
+Each aggregate delta gets a **paired bootstrap 95% confidence interval** over cases (10 000
+resamples, seeded, so the same data always gives the same answer); a metric is a regression only
+when its interval lies entirely on the bad side of 0, so one flaky case does not fail the build:
+
+```python
+from agentlens.compare import compare_experiments
+from agentlens.store import SQLiteStore
+from agentlens.suite import Suite, run_suite
+
+def agent(question: str) -> str:
+    return question.upper()                 # the baseline behaviour
+
+def new_agent(question: str) -> str:
+    return question if "refund" in question else question.upper()   # a "prompt change"
+
+cases = [{"id": f"q{i}", "input": f"refund {i}" if i % 3 == 0 else f"hello {i}",
+          "expected": (f"refund {i}" if i % 3 == 0 else f"hello {i}").upper()}
+         for i in range(30)]
+defaults = {"evaluators": ["no_error", "exact_match"]}
+
+with SQLiteStore("runs.db") as store:
+    run_suite(Suite(name="demo", agent=agent, cases=cases, defaults=defaults),
+              store=store, name="main")
+    run_suite(Suite(name="demo", agent=new_agent, cases=cases, defaults=defaults),
+              store=store, name="pr-123")
+    comparison = compare_experiments(store, "main", "pr-123")   # 10k resamples, seed 0
+
+pass_rate = comparison.metric("pass_rate")
+print(f"{pass_rate.delta:+.2f} [{pass_rate.ci_low:+.2f}, {pass_rate.ci_high:+.2f}]",
+      pass_rate.status)
+print([m.name for m in comparison.regressions])
+print([c.case_id for c in comparison.case_regressions][:3],
+      comparison.case_regressions[0].regressed_evaluators)
+# -0.33 [-0.50, -0.17] regression
+# ['pass_rate', 'score.exact_match']
+# ['q0', 'q3', 'q6'] ['exact_match']
+```
+
+Cases only in one experiment are listed in `added_cases`/`removed_cases`; `compare_runs` compares
+two in-memory `run_suite` results, `paired_bootstrap(diffs)` is the statistic on its own, and
+`comparison.model_dump_json()` is what gates and reports consume. The interval needs about 20+
+cases to be meaningful (ADR 0005).
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/) · [LLM judges](docs/judges.md).
