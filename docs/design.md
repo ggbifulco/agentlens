@@ -912,10 +912,53 @@ Implementation notes (`src/agentlens/cli/`, `src/agentlens/report/`, #24):
   (totals, `run_metrics` means, `CaseSummary` per case with failed evaluators) and
   `ComparisonReport(comparison, gates)`; `load_report(path)` reads either (or a bare
   `Comparison`). `render(report, fmt)` dispatches on a registry keyed by `ReportFormat`
-  (`text`, `json`, `markdown`, `html`); only plain text (no colours, same in a terminal, a CI log
-  or a file) and JSON exist now. #26 (rich terminal), #27 (Markdown) and #28 (HTML) plug in with
+  (`text`, `rich`, `json`, `markdown`, `html`); plain text has no colours (same in a terminal, a
+  CI log or a file); the rich terminal report is #26 (below). #27 (Markdown) and #28 (HTML) plug in with
   `register_renderer`, so the CLI's `--format` needs no change; asking for a format with no
   renderer is exit 2 naming the issue that brings it.
+Implementation notes — rich terminal report (`src/agentlens/report/terminal.py`, #26, FR-C1):
+- **Format `rich`** registered like the others (`ReportFormat.RICH`, `RichRenderer`), so
+  `render(report, "rich")` returns the report with ANSI colours; `RichRenderer(width=, color=)`
+  (default width: the terminal's, else 100). The building blocks are public too:
+  `comparison_renderable(report)` / `experiment_renderable(report)` return rich renderables to
+  print on any `rich.console.Console` (e.g. one that records, for an export).
+- **Comparison view**: header (baseline/candidate, paired/added/removed cases, bootstrap method);
+  a metrics table with `n`, baseline, candidate, delta (absolute, with `↑`/`↓` for the way the
+  value moved) and delta %, the CI and the status; a one-line verdict; case regression and
+  improvement tables (pass rate `1 → 0`, runs, regressed evaluators); added/removed cases; a
+  gates panel (green/red border, `PASS`/`FAIL`/`SKIP` per bound with rule, actual value and
+  reason, then the notes). **Colour follows the metric's `Direction`**, the arrow follows the
+  value: cost `↑` is red, pass rate `↑` green, so "up" never has to be read as "good". The
+  metric name carries `↑`/`↓` for the direction that is better (explained in the caption).
+  Colour never carries meaning alone (a requirement for colour-blind users and `NO_COLOR`):
+  regressions also say `REGRESSION` (uppercase, as in plain text), improvements `improvement`,
+  missing values `-`.
+- **Experiment view**: header, metrics (pass rate as a percentage, mean score per evaluator,
+  cost, latency, steps — the `run_metrics` means), a *failures* table with only the cases that
+  failed a repetition (passed/runs, errors, failed evaluators) or "all N cases passed", and the
+  gates panel. The plain-text report still lists every case.
+- **When the CLI uses it**: `run`, `compare` and `report` print `rich` when stdout is an
+  interactive terminal (`isatty`) and plain `text` when it is piped/redirected, `$NO_COLOR` is
+  non-empty (no-color.org) or `$TERM=dumb` (`cli._common.auto_format`). `$FORCE_COLOR` is
+  deliberately *not* a reason to switch: CI sets it, and CI logs and scripts parsing the output
+  should keep the stable plain text. `report --format rich|text|json` overrides; `report -o FILE`
+  without `--format` writes plain text.
+- **Trailing padding** (rich pads every line to the width) is stripped from the string output,
+  so copied or diffed reports have no trailing spaces.
+- **Snapshot tests** (`tests/report/test_terminal.py`, `tests/report/snapshots/*.txt`): fixed
+  experiments and runs, rendered on `Console(record=True, width=100, color_system=None)` and
+  exported as text (trailing spaces stripped), compared with the committed files.
+  `AGENTLENS_UPDATE_SNAPSHOTS=1 uv run pytest tests/report/test_terminal.py` rewrites them
+  (review the diff); a missing snapshot is written and the test fails once. Colour rules are
+  tested on the cells' styles and on the ANSI output. No new test dependency: `syrupy` would
+  add snapshot management we need for two files.
+- **Dependency**: `rich` is now declared (`rich>=13.0`) since `agentlens.report` imports it
+  directly; it was already installed through Typer, so nothing new is pulled in, but relying on
+  a transitive dependency would break if Typer dropped or loosened it.
+- **Replay divergence** (`replay_divergence` trace metadata) is not shown: neither report model
+  carries traces. It can be added to `CaseComparison`/`CaseSummary` when replay-based comparisons
+  land in the CLI.
+
 - **Not yet**: `agentlens ui` (M6), the pairwise judge in `compare` (§7 note), user `config`
   values on `run` (Python API only).
 

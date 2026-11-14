@@ -520,10 +520,30 @@ $ agentlens export traces.jsonl --experiment pr-123 && agentlens import traces.j
 |---|---|
 | `run SUITE [--name --model --repetitions --concurrency --timeout --gates --set-baseline -q]` | Runs the suite, saves the experiment, prints a summary (per-run progress on stderr). `--gates` checks the absolute rules (`min`/`max`); `--set-baseline` marks the run as the suite's baseline unless a gate failed. |
 | `compare --candidate X [--baseline Y --gates --resamples --seed --confidence --json PATH]` | Candidate vs baseline with bootstrap CIs. `--baseline` takes an id, a name (most recent) or `baseline` (the default: the marked baseline of the candidate's suite). `--json -` prints JSON instead of text. |
-| `report EXPERIMENT\|FILE [--format text\|json] [-o PATH]` | An experiment's totals, metrics and failing cases, or a saved comparison re-rendered. `markdown`/`html` (and a rich terminal view) arrive with the reporters of #26–#28. |
+| `report EXPERIMENT\|FILE [--format rich\|text\|json] [-o PATH]` | An experiment's totals, metrics and failing cases, or a saved comparison re-rendered. `markdown`/`html` arrive with the reporters of #27–#28. |
 | `baseline set\|unset EXPERIMENT`, `baseline show [SUITE]` | Manage the per-suite baseline. |
 | `experiments ls`, `traces ls`, `traces show ID` | Browse the database. |
 | `export PATH`, `import PATH` | JSONL interchange (filters `--name/--experiment/--limit`; `import --experiment`). |
+
+**Output:** on an interactive terminal `run`, `compare` and `report` print the **rich report**:
+coloured tables where a regressed metric is red and says `REGRESSION`, an improvement is green,
+an unchanged one dim, each delta has an arrow for the way the value moved (`↑`/`↓`, coloured by
+whether that is good for the metric: lower cost is good, lower pass rate is bad), case regressions
+get their own table and gates a pass/fail panel with every reason. Piped, redirected, in CI logs
+or with `NO_COLOR` set they print the plain text shown above, which is stable for scripts;
+`report --format rich|text` picks explicitly. From Python, `render(report, "rich")` returns the
+same view with ANSI colours:
+
+```python
+from agentlens.compare import compare_runs
+from agentlens.report import ComparisonReport, render
+from agentlens.suite import Suite, run_suite
+
+cases = [{"id": f"q{i}", "input": f"hello {i}", "expected": f"HELLO {i}"} for i in range(5)]
+suite = Suite(name="demo", agent=str.upper, cases=cases, defaults={"evaluators": ["exact_match"]})
+comparison = compare_runs(run_suite(suite), run_suite(suite.model_copy(update={"agent": str.lower})))
+print(render(ComparisonReport(comparison=comparison), "rich"))   # pass rate ↓ -1 ... REGRESSION
+```
 
 `--db PATH` (or `$AGENTLENS_DB`) picks the database, default `.agentlens/agentlens.db`.
 **Exit codes:** `0` success, `1` a gate failed, `2` usage or configuration error (bad arguments,
