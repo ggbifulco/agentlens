@@ -8,7 +8,7 @@ from agentlens.evals import EvaluatorConfigError
 from agentlens.evals.judge import check_template, load_template, render_template
 
 
-@pytest.mark.parametrize("name", ["judge_system", "rubric", "pass_fail", "reference"])
+@pytest.mark.parametrize("name", ["judge_system", "rubric", "pass_fail", "reference", "pairwise"])
 def test_packaged_templates_exist(name: str) -> None:
     text = load_template(name)
     assert text.strip()
@@ -52,3 +52,11 @@ def test_check_template() -> None:
     for bad in ("", "  ", 3, None):
         with pytest.raises(EvaluatorConfigError, match="non-empty string"):
             check_template(bad, ["criteria"])
+
+
+def test_pairwise_template_placeholders() -> None:
+    text = load_template("pairwise")
+    for placeholder in ("$criteria", "$input", "$output_1", "$output_2", "$reference"):
+        assert placeholder in text
+    assert '"winner"' in text
+    assert "JSON" in text

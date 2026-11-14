@@ -42,6 +42,7 @@ __all__ = [
     "JUDGE_MODEL_ENV",
     "JUDGE_TEMPERATURE",
     "MAX_RETRIES",
+    "BaseJudge",
     "JudgePrompt",
     "JudgeRun",
     "LLMJudge",
@@ -154,8 +155,14 @@ def _label(client: LLMClient) -> str:
     return text or type(client).__name__
 
 
-class LLMJudge(ABC, Generic[VerdictT]):
-    """Base class of LLM-as-judge evaluators (``docs/design.md`` §5, FR-E2/FR-E4).
+class BaseJudge(ABC, Generic[VerdictT]):
+    """What every LLM judge shares, evaluator or not (``docs/design.md`` §5, FR-E4).
+
+    Owns the judge model/client, the cache and the call flow
+    (:meth:`run_judge` / :meth:`arun_judge`: cache → ``temperature=0`` JSON-mode
+    call → parse → retry → cache write). Subclasses define :meth:`parse_reply`
+    and decide which prompts to ask: :class:`LLMJudge` asks one per trace (an
+    evaluator), :class:`~agentlens.evals.judge.PairwiseJudge` two per pair of traces.
 
     Args:
         model: Judge model spec (``"openai:gpt-4o-mini"``, see
@@ -261,20 +268,12 @@ class LLMJudge(ABC, Generic[VerdictT]):
     # -- what concrete judges define -------------------------------------------
 
     @abstractmethod
-    def build_prompt(self, trace: Trace, case: Case) -> JudgePrompt:
-        """Render the prompt for ``trace`` (the agent's run on ``case``)."""
-
-    @abstractmethod
     def parse_reply(self, data: dict[str, JsonValue]) -> VerdictT:
         """Read the verdict out of the judge's JSON object.
 
         Raises:
             JudgeParseError: if the object does not hold a valid verdict.
         """
-
-    @abstractmethod
-    def make_result(self, verdict: VerdictT, run: JudgeRun[VerdictT]) -> EvalResult:
-        """Turn a parsed verdict into the :class:`EvalResult`."""
 
     # -- the shared flow ---------------------------------------------------------
 
@@ -357,6 +356,23 @@ class LLMJudge(ABC, Generic[VerdictT]):
             response = await client.acomplete(self._request(messages))
             messages = self._receive(run, messages, response)
         return run
+
+
+class LLMJudge(BaseJudge[VerdictT]):
+    """Base class of LLM-as-judge evaluators (``docs/design.md`` §5, FR-E2/FR-E4).
+
+    A :class:`BaseJudge` that is also an :class:`~agentlens.evals.Evaluator`:
+    subclasses add :meth:`build_prompt` (one prompt per trace) and
+    :meth:`make_result`. Parameters are those of :class:`BaseJudge`.
+    """
+
+    @abstractmethod
+    def build_prompt(self, trace: Trace, case: Case) -> JudgePrompt:
+        """Render the prompt for ``trace`` (the agent's run on ``case``)."""
+
+    @abstractmethod
+    def make_result(self, verdict: VerdictT, run: JudgeRun[VerdictT]) -> EvalResult:
+        """Turn a parsed verdict into the :class:`EvalResult`."""
 
     def _result(self, run: JudgeRun[VerdictT]) -> EvalResult:
         if run.verdict is not None:

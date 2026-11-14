@@ -34,6 +34,13 @@ parse its JSON verdict robustly and cache it by ``sha256(judge model, prompt, ou
     judge = get_evaluator({"llm_rubric": "Polite, confirms the refund amount"},
                           model="openai:gpt-4o-mini")
 
+:class:`PairwiseJudge` compares two traces of the same case (baseline vs
+candidate), judging both presentation orders to cancel position bias::
+
+    result = PairwiseJudge("Confirms the refund amount", model="openai:gpt-4o-mini").compare(
+        baseline_trace, candidate_trace, case)
+    result.winner, result.to_eval_result(candidate="b").passed
+
 An evaluator that raises never crashes a run: :func:`run_evaluator` and
 ``@evaluator`` turn the exception into a failed :class:`~agentlens.schema.EvalResult`.
 Configuration errors (unknown name, bad parameters) are raised eagerly.
@@ -79,6 +86,8 @@ from agentlens.evals.judge import (
     JudgeParseError,
     LLMJudge,
     MemoryJudgeCache,
+    PairwiseJudge,
+    PairwiseResult,
     judge_cache_key,
 )
 from agentlens.evals.registry import (
@@ -127,6 +136,8 @@ __all__ = [
     "NoError",
     "OutputPath",
     "OutputPathError",
+    "PairwiseJudge",
+    "PairwiseResult",
     "Regex",
     "RegisteredEvaluator",
     "SpecLike",
