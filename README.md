@@ -303,6 +303,42 @@ print(result.to_eval_result(candidate="b").passed)
 # True
 ```
 
+## Suites
+A suite names the agent under test (`module:callable`), the cases and the evaluators. Suite
+`defaults` apply to every case; a case evaluator with the same name replaces the default one:
+
+```yaml
+# suites/support.yaml
+name: support-agent
+agent: support_agent:run_agent   # imported from the cwd or the suite's folder
+repetitions: 3
+defaults:
+  evaluators: [no_error, {max_steps: 8}]
+cases:
+  - id: refund-simple
+    input: "I want a refund for order 1234"
+    expected: {tools: [lookup_order, issue_refund]}
+    evaluators:
+      - {tool_sequence: {mode: ordered}}
+      - {max_steps: 4}               # overrides the default max_steps: 8
+```
+
+```python
+from agentlens.suite import load_suite
+
+suite = load_suite("suites/support.yaml")
+agent = suite.load_agent()
+for case in suite.resolved_cases():
+    print(case.id, [spec.name for spec in case.evaluators], agent(case.input))
+# refund-simple ['no_error', 'tool_sequence', 'max_steps'] ...
+```
+
+Every problem is reported at once, with its position: `suites/support.yaml:13:9:
+cases[0].evaluators[1]: unknown evaluator 'max_step' (did you mean 'max_steps'?)`. Cases can live
+in their own file (`cases: data/support.jsonl`), and `Suite(name=..., agent=run_agent,
+cases=[...])` builds a suite in Python. `suite.content_hash()` fingerprints what the suite runs
+(agent, model, repetitions, resolved cases), so experiments can tell whether the suite changed.
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/) · [LLM judges](docs/judges.md).

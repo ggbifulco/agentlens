@@ -663,6 +663,40 @@ cases:
       - {llm_rubric: {criteria: "Polite, confirms refund amount"}}
 ```
 
+Implementation notes (`src/agentlens/suite/`, #20, FR-S1):
+- **Model**: `Suite` (pydantic, `extra="forbid"`): `name`, `agent` (`"pkg.mod:callable"` or, for
+  Python suites, the callable itself; serialised as `module:qualname`), `description`, `model`,
+  `repetitions` (>= 1), `concurrency` (>= 1), `timeout_s`, `imports` (modules imported before
+  checking evaluators, e.g. custom `@agentlens.evaluator` definitions), `metadata`, `defaults`
+  (`SuiteDefaults`: `evaluators`, `tags`), `cases` (>= 1, unique ids). `cases` keep what was
+  declared; `resolved_cases()` returns copies with the defaults merged in, which is what the
+  runner (#21) executes.
+- **Defaults merge** (`merge_evaluators`): defaults first, then the case's own; a case evaluator
+  *replaces* every default with the same name (so `{max_steps: 4}` tightens a default
+  `{max_steps: 8}` instead of running both). Tags: defaults then own, de-duplicated.
+- **Errors with line context**: the YAML is composed into a node tree with `yaml.SafeLoader`, every
+  node's start mark recorded by path in a `SourceMap`, then constructed from the same tree (one
+  parse). Pydantic error locations map back to `file:line:column` (longest recorded prefix; the
+  key position for unknown fields, with a "did you mean" hint). All problems (schema, duplicate
+  keys/ids, unknown evaluators with suggestions, bad parameters, failing `imports`) are collected
+  into one `SuiteError` whose `issues` are `SuiteIssue(message, loc, file, line, column)`, sorted
+  by position. Evaluator specs are validated by building them from the registry (built once per
+  distinct spec, then discarded); `check=False` skips that.
+- **Datasets**: `cases: path` (relative to the suite file) or `load_cases(path)` read `.jsonl`
+  (row positions), `.yaml`/`.yml`, `.json` (read as YAML to keep positions); the dataset's source
+  map is mounted under `cases`, so errors point into the dataset file.
+- **Agent import** (`resolve_agent`, `Suite.load_agent`): entry-point syntax, attribute paths
+  (`mod:Agent.run`); the cwd and the suite's folder are *appended* to `sys.path` (installed code
+  wins on a clash, a stray `json.py` cannot shadow the stdlib). Failures → `AgentImportError`
+  (a `SuiteError`) distinguishing missing module, module raising on import, missing attribute,
+  not callable. The agent is imported lazily, not by `load_suite`, so suites can be validated
+  without importing the code under test.
+- **For the runner (#21)**: `is_async_agent(fn)` / `Suite.agent_is_async()` (async functions,
+  partials, objects with `async def __call__`); `Suite.content_hash()` = sha256 of the canonical
+  JSON (sorted keys) of the suite with resolved cases, excluding `description`, `concurrency`
+  and the `defaults` spelling, so it changes exactly when what runs changes (including an
+  external dataset's contents) — recorded in the experiment config as the suite hash.
+
 ## 7. Comparison & gates
 - Metrics per case: pass rate, mean score per evaluator, cost, latency, steps.
 - Aggregate delta with **paired bootstrap** (10k resamples over cases) → 95% CI.
