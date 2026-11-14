@@ -371,6 +371,38 @@ with SQLiteStore("runs.db") as store:
 Each trace carries `case_id`, `repetition`, `suite` and `experiment` metadata; `arun_suite` is the
 `async` version, and `progress=lambda result, done, total: ...` reports each finished run.
 
+### Comparing experiments
+`compare_experiments` diffs a candidate against a baseline per case and in aggregate. For each
+metric (`pass_rate`, `score:<evaluator>`, `cost_usd`, `latency_ms`, `steps`) the per-case
+differences are resampled with a seeded **paired bootstrap** (10 000 resamples, 95% CI): a metric
+*regresses* only when its whole interval is on the bad side of zero, so run-to-run noise does not
+flag anything ([ADR 0005](docs/adr/0005-bootstrap-regression.md)):
+
+```python
+from agentlens.compare import compare_experiments
+
+def broken_agent(question: str) -> str:
+    return "?" if question.startswith("q1") else question     # a "prompt change" breaking 11 cases
+
+cases = [{"id": f"q{i}", "input": f"q{i}", "expected": f"q{i}"} for i in range(30)]
+evaluators = {"evaluators": ["exact_match"]}
+with SQLiteStore(":memory:") as store:
+    run_suite(Suite(name="qa", agent=lambda q: q, cases=cases, defaults=evaluators),
+              store=store, name="main")
+    run_suite(Suite(name="qa", agent=broken_agent, cases=cases, defaults=evaluators),
+              store=store, name="pr-1")
+    result = compare_experiments(store, baseline="main", candidate="pr-1")
+
+pr = result.metric("pass_rate")
+print(f"{pr.delta:+.2f} [{pr.ci.low:+.2f}, {pr.ci.high:+.2f}] {pr.status}")
+# -0.37 [-0.53, -0.20] regressed
+print(len(result.regressed_cases), [m.metric for m in result.regressions])
+# 11 ['pass_rate', 'score:exact_match']
+```
+
+Cases only on one side are listed in `added_cases` / `removed_cases`; with fewer than `min_cases`
+(default 2) paired cases a metric gets `insufficient_data`. ADR 0005 recommends ~20+ cases.
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/) · [LLM judges](docs/judges.md).

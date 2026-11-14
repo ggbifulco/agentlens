@@ -745,6 +745,36 @@ FR-S2/FR-S3):
   Regression = CI entirely below 0 for "higher is better" metrics.
 - Gates YAML: `success_rate: {min: 0.9}`, `cost_usd: {max_delta_pct: 20}`, `regressions: {max: 0}`.
 
+Implementation notes — comparator (`src/agentlens/compare/`, #22, FR-S4, ADR 0005):
+- **Metrics** (`metrics.py`): each run (trace + eval results) → `RunMetrics` (`passed` = no error
+  and every evaluator passed, `cost_usd` = `Trace.total_cost`, `latency_ms`, `steps` =
+  `Trace.n_steps`, mean score per evaluator). Runs are averaged per case into `CaseMetrics.values`
+  (`pass_rate`, `score:<evaluator>`, `cost_usd`, `latency_ms`, `steps`), so every case weighs the
+  same however many repetitions it has. A metric a run does not have (unknown cost, evaluator not
+  run) is *absent*, never zero. `collect_metrics(store, id | name | Experiment)` groups the
+  experiment's traces by `case_id` metadata; `metrics_from_run(ExperimentRun)` skips the store.
+- **Pairing** (`comparator.py`): only cases in both experiments are compared (`added_cases` /
+  `removed_cases` listed); each metric is bootstrapped over the per-case differences
+  `candidate - baseline` of the cases that have it on both sides (`MetricDelta.n`).
+- **Bootstrap** (`bootstrap.py`, stdlib only — no NumPy): percentile bootstrap of the mean,
+  10 000 resamples, 95%, linear-interpolated percentiles (NumPy's default). Seeded private
+  `random.Random`; the resampled positions depend only on (seed, resamples, n), so all metrics
+  over the same cases are resampled identically and results are reproducible. Bounds are clamped
+  to the data range; identical differences give a zero-width interval. ~20 ms per metric at
+  n = 50. Alternatives considered: BCa intervals (better small-sample coverage, but harder to
+  explain in a PR comment and needs jackknife), a t-test (assumes normality; pass/fail
+  differences are discrete and skewed), NumPy (a heavy dependency for one loop).
+- **Verdicts**: `MetricStatus` `regressed` (interval entirely on the bad side, beyond a 1e-12
+  tolerance), `improved`, `unchanged`, `insufficient_data` (fewer than `min_cases`=2 paired
+  cases; interval still reported). Per case, `CaseStatus` (`regressed`/`improved`/`mixed`/
+  `unchanged`) looks at quality metrics only (`pass_rate`, scores): one case's cost/latency
+  is too noisy to call. `MetricDelta.delta_pct` (relative to the baseline, `None` at 0) is what
+  cost gates (#23) will use.
+- **Tests**: hypothesis properties (seed reproducibility, bounds within the data range, contains
+  the sample mean, shift/scale equivariance, sign flip mirrors the interval, self-comparison is
+  zero, swapping sides mirrors deltas/intervals/verdicts) plus a coverage simulation (~95% of
+  intervals cover the true mean).
+
 ## 8. CLI
 `agentlens run`, `agentlens compare`, `agentlens report`, `agentlens baseline set`,
 `agentlens traces ls/show`, `agentlens export/import`, `agentlens ui`.
