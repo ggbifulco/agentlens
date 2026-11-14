@@ -367,3 +367,28 @@ Append-only log of development sessions (newest at the bottom).
 - No new dependencies (PyYAML already required). 1295 tests, 100% coverage.
 - Next: #21 Suite runner (repetitions, bounded asyncio concurrency, experiment persistence,
   baseline mark).
+
+## 2026-11-14 — #21 Suite runner (repetitions, concurrency, experiment persistence)
+- Added `agentlens.suite.runner`: `run_suite(suite | path, *, store, name, model, repetitions,
+  concurrency, timeout_s, config, registry, redactor, progress)` (blocking, `asyncio.run`) and
+  async `arun_suite`. One task per (case, repetition) behind an `asyncio.Semaphore(concurrency)`
+  (slot = agent call + evaluation); async agents awaited, sync agents via `asyncio.to_thread`
+  (context copied, so `wrap_llm`/`wrap_tool` spans land in the run's trace). Each run is
+  `agentlens.run(suite.name, metadata={case_id, repetition, suite, experiment})`.
+- Agent convention: `agent(case.input)`, plus `model=` when the agent has a `model` parameter
+  (`model=` > `suite.model` > `$AGENTLENS_MODEL`), ready for `get_client(model)`.
+- Failure isolation: agent exceptions and `RunTimeoutError` (per-run `timeout_s`, `wait_for`)
+  recorded as `trace.error`, run still evaluated and saved; store errors abort the suite. The
+  redacted trace is what gets evaluated and stored; a redactor failure stores a content-free
+  error trace.
+- Results: `ExperimentRun` (`experiment`, `cases`, `runs`, `total`, `passed`, `errors`,
+  `pass_rate`, `case(id)`), `CaseResult` (`pass_rate`, `errors`, `mean_scores()`), `RunResult`
+  (`trace`, `eval_results`, `passed`, `error`, `timed_out`); `progress(result, done, total)`.
+- `agentlens.suite.experiment`: `experiment_config` (git sha + dirty flag, model, suite hash,
+  agent, repetitions/concurrency/timeout, agentlens version, suite metadata, user overrides),
+  `git_info`, `resolve_model`; baselines `set_baseline` (one per suite, others unmarked first),
+  `unset_baseline`, `get_baseline`, `find_experiment` (id or most recent name),
+  `ExperimentNotFoundError`.
+- Docs: README "Running a suite" (verified), design §6 implementation notes.
+- No new dependencies. 1342 tests, 100% coverage.
+- Next: #22 Comparator with paired bootstrap confidence intervals.
