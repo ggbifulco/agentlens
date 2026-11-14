@@ -146,6 +146,29 @@ Implementation notes (`src/agentlens/tracing/`):
   holds per-call `request_hash` + request/response JSON (call index = order of `llm_call`
   spans) to build a cassette from. Tool playback can hook in via `__agentlens_tool__`.
 
+Implementation notes — OpenTelemetry export (`integrations/otel.py`, #32, FR-T6):
+- Optional extra `agentlens[otel]` (`opentelemetry-api`, `opentelemetry-sdk`); the module
+  raises an `ImportError` naming the extra when they are missing, and nothing else imports it.
+- **After the fact, not live**: `export_trace(trace, tracer=|tracer_provider=,
+  capture_content=False, context=None)` replays a *finished* (redacted) trace into OTel with
+  explicit start/end timestamps (exact integer nanoseconds). Alternative considered: emitting OTel
+  spans live from the recorder — rejected because it would bypass redaction (NFR-5), put the
+  OTel API on the hot path, and couple the core to an optional dependency. `OTelExporter` is a
+  sink (`run(..., sink=)`; errors logged, FR-T5); `fan_out(*sinks)` combines it with the store.
+- **Mapping** (GenAI semconv): trace → root `invoke_agent {name}` (`gen_ai.agent.name`,
+  `agentlens.metadata.*` scalars, total cost/tokens); `agent_step` → `invoke_agent {name}`;
+  `llm_call` → `chat {model}`, kind CLIENT, `gen_ai.provider.name`, `gen_ai.request.model/
+  temperature/max_tokens`, `gen_ai.response.model`, `gen_ai.usage.input_tokens/output_tokens`
+  (from the `wrap_llm` attributes and `span.usage`); `tool_call` → `execute_tool {tool}`,
+  `gen_ai.tool.name`; `retrieval`/`custom` keep their name (no standard operation). All spans:
+  `agentlens.trace_id`/`span_id`/`span.kind`, `agentlens.usage.cost_usd` (no gen_ai equivalent).
+  Errors → status ERROR + `error.type` (`Type` of `"Type: message"`, else `_OTHER`).
+- **Content opt-in**: `capture_content=True` adds `gen_ai.input.messages`,
+  `gen_ai.output.messages`, `gen_ai.tool.call.arguments`/`result` (JSON strings), as the
+  conventions recommend for sensitive data. The root span starts a new OTel trace unless a parent
+  `context` is given (e.g. a CI job span). Span/trace ids are the SDK's; the AgentLens ids are
+  attributes, so a backend span links back to the store.
+
 ## 2b. Store (`agentlens.store`, ADR 0003)
 - `Store` protocol (`runtime_checkable`): `save_trace(trace, experiment_id=)`, `get_trace`,
   `list_traces(name=, experiment_id=, metadata=, limit=)`, `save_experiment`, `get_experiment`,

@@ -34,6 +34,12 @@ agentlens = "agentlens.cli:app"
 [project.entry-points.pytest11]
 agentlens = "agentlens.integrations.pytest_plugin"
 
+[project.optional-dependencies]
+otel = [
+    "opentelemetry-api>=1.27",
+    "opentelemetry-sdk>=1.27",
+]
+
 [project.urls]
 Homepage = "https://github.com/ggbifulco/agentlens"
 Issues = "https://github.com/ggbifulco/agentlens/issues"
@@ -49,6 +55,7 @@ dev = [
     "respx>=0.21",
     "types-pyyaml>=6.0",
     "types-jsonschema>=4.18",
+    "opentelemetry-sdk>=1.27",
 ]
 
 [build-system]
