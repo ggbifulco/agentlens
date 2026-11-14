@@ -15,7 +15,9 @@ import their siblings lazily later on.
 
 from __future__ import annotations
 
+import functools
 import importlib
+import inspect
 import os
 import sys
 from collections.abc import Callable, Iterable
@@ -25,7 +27,7 @@ from typing import Any
 
 from agentlens.suite.errors import AgentImportError
 
-__all__ = ["check_import_path", "import_module", "resolve_agent"]
+__all__ = ["check_import_path", "import_module", "is_async_agent", "resolve_agent"]
 
 PathLike = str | os.PathLike[str]
 
@@ -128,3 +130,17 @@ def resolve_agent(
             "expected a function, a method or an object with __call__)"
         )
     return target  # type: ignore[no-any-return]
+
+
+def is_async_agent(agent: Callable[..., Any]) -> bool:
+    """Whether calling ``agent`` returns an awaitable that the runner must await.
+
+    True for ``async def`` functions and methods, :func:`functools.partial` of
+    them, and objects whose ``__call__`` is ``async def``. A plain function that
+    happens to return a coroutine is not detected; wrap it in ``async def``.
+    """
+    while isinstance(agent, functools.partial):
+        agent = agent.func
+    if inspect.iscoroutinefunction(agent):
+        return True
+    return inspect.iscoroutinefunction(type(agent).__call__)

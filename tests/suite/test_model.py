@@ -251,3 +251,49 @@ def test_search_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_load_agent_errors_are_agent_import_errors() -> None:
     with pytest.raises(AgentImportError):
         make(agent="nope_module_xyz:run").load_agent()
+
+
+async def _async_echo(text: str) -> str:
+    return text
+
+
+def test_agent_is_async() -> None:
+    assert make(agent=echo).agent_is_async() is False
+    assert make(agent=_async_echo).agent_is_async() is True
+
+
+def test_content_hash_is_stable_and_hex() -> None:
+    digest = make().content_hash()
+    assert len(digest) == 64
+    assert int(digest, 16) >= 0
+    assert make().content_hash() == digest
+
+
+def test_content_hash_ignores_description_concurrency_and_defaults_spelling() -> None:
+    base = make(cases=[{"id": "a", "input": "hi", "evaluators": ["no_error"], "tags": ["t"]}])
+    via_defaults = make(
+        description="docs only",
+        concurrency=8,
+        defaults={"evaluators": ["no_error"], "tags": ["t"]},
+        cases=[{"id": "a", "input": "hi"}],
+    )
+    assert via_defaults.content_hash() == base.content_hash()
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"repetitions": 3},
+        {"model": "openai:gpt-4o-mini"},
+        {"agent": "pkg.mod:other"},
+        {"cases": [{"id": "a", "input": "hello"}]},
+        {"defaults": {"evaluators": [{"max_steps": 8}]}},
+        {"timeout_s": 5.0},
+    ],
+)
+def test_content_hash_changes_with_what_runs(change: dict[str, Any]) -> None:
+    assert make(**change).content_hash() != make().content_hash()
+
+
+def test_content_hash_of_callable_agent_uses_its_name() -> None:
+    assert make(agent=echo).content_hash() == make(agent=f"{__name__}:echo").content_hash()

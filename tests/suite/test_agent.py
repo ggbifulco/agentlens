@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import functools
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from agentlens.suite import AgentImportError, check_import_path, import_module, resolve_agent
+from agentlens.suite import (
+    AgentImportError,
+    check_import_path,
+    import_module,
+    is_async_agent,
+    resolve_agent,
+)
 from tests.suite.conftest import WriteFile
 
 AGENT_MODULE = """
@@ -135,3 +143,41 @@ def test_not_callable(tmp_path: Path, write: WriteFile) -> None:
         resolve_agent("myagent:NOT_CALLABLE", search_paths=[tmp_path])
     with pytest.raises(AgentImportError, match=r"is not callable \(got str"):
         resolve_agent("myagent:agent.greeting", search_paths=[tmp_path])
+
+
+def _sync_agent(text: str) -> str:
+    return text
+
+
+async def _async_agent(text: str) -> str:
+    return text
+
+
+class _AsyncCallable:
+    async def __call__(self, text: str) -> str:
+        return text
+
+    async def respond(self, text: str) -> str:
+        return text
+
+
+class _SyncCallable:
+    def __call__(self, text: str) -> str:
+        return text
+
+
+@pytest.mark.parametrize(
+    ("agent", "expected"),
+    [
+        (_sync_agent, False),
+        (_async_agent, True),
+        (functools.partial(_async_agent), True),
+        (functools.partial(functools.partial(_sync_agent)), False),
+        (_AsyncCallable(), True),
+        (_AsyncCallable().respond, True),
+        (_SyncCallable(), False),
+        (len, False),
+    ],
+)
+def test_is_async_agent(agent: Any, expected: bool) -> None:
+    assert is_async_agent(agent) is expected

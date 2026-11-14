@@ -20,7 +20,12 @@ Datasets can live in their own file (``cases: data/support.jsonl`` in the suite,
 or :func:`load_cases` directly).
 """
 
-from agentlens.suite.agent import check_import_path, import_module, resolve_agent
+from agentlens.suite.agent import (
+    check_import_path,
+    import_module,
+    is_async_agent,
+    resolve_agent,
+)
 from agentlens.suite.errors import AgentImportError, SuiteError, SuiteIssue, format_loc
 from agentlens.suite.loader import DATASET_SUFFIXES, load_cases, load_suite
 from agentlens.suite.model import Suite, SuiteDefaults, merge_evaluators
@@ -35,6 +40,7 @@ __all__ = [
     "check_import_path",
     "format_loc",
     "import_module",
+    "is_async_agent",
     "load_cases",
     "load_suite",
     "merge_evaluators",

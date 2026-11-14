@@ -17,6 +17,8 @@ but it is a plain pydantic model, so it can be built in Python too::
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -36,7 +38,7 @@ from agentlens.evals import EvaluatorError, EvaluatorRegistry, UnknownEvaluatorE
 from agentlens.evals.registry import default_registry
 from agentlens.schema import Case, EvaluatorSpec
 from agentlens.schema._base import SchemaModel
-from agentlens.suite.agent import check_import_path, import_module, resolve_agent
+from agentlens.suite.agent import check_import_path, import_module, is_async_agent, resolve_agent
 from agentlens.suite.errors import AgentImportError, Loc, SuiteError, SuiteIssue
 
 __all__ = ["SKIP_CHECKS", "Suite", "SuiteDefaults", "merge_evaluators"]
@@ -195,6 +197,29 @@ class Suite(SchemaModel):
             AgentImportError: if the import path cannot be resolved.
         """
         return resolve_agent(self.agent, search_paths=self.search_paths())
+
+    def agent_is_async(self) -> bool:
+        """Import the agent and tell whether it must be awaited (:func:`is_async_agent`)."""
+        return is_async_agent(self.load_agent())
+
+    # ------------------------------------------------------------------ identity
+
+    def content_hash(self) -> str:
+        """A stable sha256 hex digest of what the suite runs.
+
+        Computed from the canonical JSON (sorted keys, no whitespace) of the
+        suite with defaults merged into the cases (:meth:`resolved_cases`), so
+        two suites that run the same cases hash the same even if one spells
+        them with ``defaults`` and the other inline, and a suite whose cases
+        live in an external dataset changes hash when that dataset changes.
+        Purely descriptive fields (``description``) and run tuning that does
+        not change results (``concurrency``) are excluded. A callable agent is
+        hashed by its ``module:qualname``.
+        """
+        data = self.model_dump(mode="json", exclude={"description", "concurrency", "defaults"})
+        data["cases"] = [case.model_dump(mode="json") for case in self.resolved_cases()]
+        payload = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     # ------------------------------------------------------------------ checks
 
