@@ -595,3 +595,20 @@ Append-only log of development sessions (newest at the bottom).
   what the bootstrap CI alone calls noise at n=27), linked from README and the example README.
 - No new dependencies. 1734 tests, 100% coverage.
 - Next: M6 P2 issues (#31 local web UI, #32 OpenTelemetry exporter), then M7 release.
+
+## 2026-11-14 — #32 OpenTelemetry GenAI exporter
+- Added `agentlens.integrations.otel` (optional extra `agentlens[otel]` = `opentelemetry-api` +
+  `opentelemetry-sdk`; `opentelemetry-sdk` also in the dev group for tests):
+  `export_trace(trace, tracer=|tracer_provider=, capture_content=False, context=None) -> int`,
+  `OTelExporter` (trace sink, errors logged), `fan_out(*sinks)`, `span_name`, `span_attributes`.
+- Mapping per the GenAI semantic conventions: root `invoke_agent {trace}`, `agent_step` →
+  `invoke_agent`, `llm_call` → `chat {model}` (CLIENT; `gen_ai.provider.name`,
+  `gen_ai.request.model/temperature/max_tokens`, `gen_ai.response.model`,
+  `gen_ai.usage.input_tokens/output_tokens`), `tool_call` → `execute_tool {tool}`
+  (`gen_ai.tool.name`); `agentlens.*` ids, kind and cost; errors → ERROR status + `error.type`.
+  Recorded timings exported in exact nanoseconds. Content (`gen_ai.input.messages`,
+  `gen_ai.output.messages`, `gen_ai.tool.call.arguments/result`) only with `capture_content`.
+- Exported after the fact from the redacted trace, not live from the recorder (keeps NFR-5 and
+  the hot path intact). Docs: README "OpenTelemetry export" (verified), design §2 notes.
+- 17 new tests (SDK `InMemorySpanExporter`). 1750 tests, 100% coverage.
+- Next: #33 Docs (quickstart, mkdocs site), #34 release. #31 is being done by another session.
