@@ -1,0 +1,133 @@
+site_name: AgentLens
+site_description: Regression testing and evaluation for LLM agents - record, replay, evaluate, compare.
+site_url: https://ggbifulco.github.io/agentlens/
+repo_url: https://github.com/ggbifulco/agentlens
+repo_name: ggbifulco/agentlens
+edit_uri: edit/main/docs/
+copyright: Apache-2.0 · developed in public, one issue per session
+
+# `mkdocs build --strict` runs in CI: any warning (broken link, bad docstring) fails the build.
+strict: true
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - navigation.footer
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: amber
+      toggle: {icon: material/weather-night, name: Switch to dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: amber
+      toggle: {icon: material/weather-sunny, name: Switch to light mode}
+  icon:
+    repo: fontawesome/brands/github
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+hooks:
+  - scripts/mkdocs_hooks.py   # tidies Sphinx roles left in docstrings (API reference)
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: false
+            show_root_toc_entry: false
+            show_if_no_docstring: false
+            members_order: source
+            filters: ["!^_"]
+            merge_init_into_class: true
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            heading_level: 2
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Concepts:
+      - Tracing: concepts/tracing.md
+      - LLM clients: concepts/llm-clients.md
+      - Store: concepts/store.md
+      - Replay: concepts/replay.md
+      - Evaluators: concepts/evaluators.md
+      - LLM judges: concepts/judges.md
+      - Judge bias & calibration: judges.md
+      - Suites: concepts/suites.md
+      - Comparison & gates: concepts/comparison.md
+      - Reports: concepts/reports.md
+  - Guides:
+      - CLI reference: cli.md
+      - GitHub Action: github-action.md
+      - pytest plugin: pytest-plugin.md
+      - Web UI: web-ui.md
+      - OpenTelemetry: opentelemetry.md
+      - Regression story: regression-story.md
+  - Design:
+      - Architecture: architecture.md
+      - Detailed design: design.md
+      - Requirements: requirements.md
+      - ADRs:
+          - adr/0001-python-tooling.md
+          - adr/0002-own-llm-protocol.md
+          - adr/0003-sqlite-store.md
+          - adr/0004-cassette-replay.md
+          - adr/0005-bootstrap-regression.md
+          - adr/0006-ci-baseline.md
+      - Development log: PROGRESS.md
+  - API reference:
+      - api/index.md
+      - api/schema.md
+      - api/tracing.md
+      - api/store.md
+      - api/llm.md
+      - api/replay.md
+      - api/evals.md
+      - api/suite.md
+      - api/compare.md
+      - api/report.md
+      - api/integrations.md
+      - api/ui.md

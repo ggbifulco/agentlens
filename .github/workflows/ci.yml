@@ -66,3 +66,19 @@ jobs:
             htmlcov/
           retention-days: 14
           if-no-files-found: warn
+
+  docs:
+    name: Docs (mkdocs build --strict)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      # Only the `docs` group: mkdocstrings reads src/ statically, no need to install the package.
+      - name: Build the docs site (any warning fails)
+        run: uv run --only-group docs mkdocs build --strict
+        env:
+          NO_MKDOCS_2_WARNING: "1"

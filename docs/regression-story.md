@@ -3,19 +3,19 @@
 This is the scenario AgentLens exists for (FR-D2): a small, reasonable-looking prompt change that
 breaks how an agent uses its tools, and the pipeline that catches it before it is merged.
 Everything below runs **offline and deterministically** on the example support-desk agent
-([`examples/support_agent`](../examples/support_agent/README.md)) with the scripted mock model:
+([`examples/support_agent`](https://github.com/ggbifulco/agentlens/blob/main/examples/support_agent/README.md)) with the scripted mock model:
 no API key, same numbers on every machine.
 
 ## 1. The change
 
 The agent's behaviour lives in its system prompt. The reviewed prompt,
-[`prompts/system_v1.txt`](../examples/support_agent/prompts/system_v1.txt), says:
+[`prompts/system_v1.txt`](https://github.com/ggbifulco/agentlens/blob/main/examples/support_agent/prompts/system_v1.txt), says:
 
 > You may refund orders of up to $200 yourself: refund the full order total with issue_refund.
 > For larger amounts do not refund: escalate to a human agent with escalate_to_human and tell the
 > customer.
 
-A pull request "makes the prompt more concise" ([`system_v2.txt`](../examples/support_agent/prompts/system_v2.txt)):
+A pull request "makes the prompt more concise" ([`system_v2.txt`](https://github.com/ggbifulco/agentlens/blob/main/examples/support_agent/prompts/system_v2.txt)):
 
 ```diff
 -- Refunds: look the order up first. Only delivered orders that were not refunded yet can be
@@ -49,7 +49,7 @@ this. `tool_sequence` forbids `issue_refund`, `contains` needs the ticket number
 ## 3. Catching it
 
 The commands below are the same ones the `expected-failure` CI job runs
-([`.github/workflows/agentlens.yml`](../.github/workflows/agentlens.yml)):
+([`.github/workflows/agentlens.yml`](https://github.com/ggbifulco/agentlens/blob/main/.github/workflows/agentlens.yml)):
 
 ```bash
 # main: the reviewed prompt, recorded as the suite's baseline
@@ -117,11 +117,11 @@ Two things make the verdict safe anyway:
 With a real, non-deterministic model you would run each case several times
 (`repetitions: 3`, for example) and rely more on the interval. A single flaky run then cannot
 fail the build, and a consistent drop still shows up as *regressed*. The
-[gates](../examples/support_agent/gates.yaml) are where you decide that trade-off for your agent.
+[gates](https://github.com/ggbifulco/agentlens/blob/main/examples/support_agent/gates.yaml) are where you decide that trade-off for your agent.
 
 ## 5. In CI
 
-[`.github/workflows/agentlens.yml`](../.github/workflows/agentlens.yml) runs two jobs:
+[`.github/workflows/agentlens.yml`](https://github.com/ggbifulco/agentlens/blob/main/.github/workflows/agentlens.yml) runs two jobs:
 
 - **regression-check** (on every pull request). The PR's base commit is the baseline and the PR is
   the candidate. The report above is posted as a PR comment and updated in place on every push,
@@ -133,4 +133,4 @@ fail the build, and a consistent drop still shows up as *regressed*. The
   regression, so a future change to the comparator or the gates cannot silently disable it.
 
 The same pipeline runs as a test, through the Python API and through the CLI:
-[`tests/e2e/test_regression_story.py`](../tests/e2e/test_regression_story.py).
+[`tests/e2e/test_regression_story.py`](https://github.com/ggbifulco/agentlens/blob/main/tests/e2e/test_regression_story.py).
