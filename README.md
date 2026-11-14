@@ -723,7 +723,8 @@ case regression. See the [example README](examples/support_agent/README.md).
 
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
-[design](docs/design.md) · [ADRs](docs/adr/) · [LLM judges](docs/judges.md).
+[design](docs/design.md) · [ADRs](docs/adr/) · [LLM judges](docs/judges.md) ·
+[regression story](docs/regression-story.md).
 
 ## Roadmap
 | Milestone | Scope |
