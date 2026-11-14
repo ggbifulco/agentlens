@@ -707,6 +707,20 @@ returns a `CaseResult` (`runs`, `pass_rate`, `mean_scores()`). The agent can be 
 import path. With `--agentlens-db`, the run is saved as an experiment of a suite named after the
 test. The fixture is synchronous: call it from regular `def` tests.
 
+## Example: support-desk agent
+[`examples/support_agent`](examples/support_agent) is a small tool-calling agent (orders, refunds,
+tracking, address changes, FAQ, escalation over an in-memory database) with a golden dataset of 27
+cases. It runs offline through a scripted mock model, or against any provider:
+
+```bash
+agentlens run examples/support_agent/suite.yaml                       # offline, deterministic
+AGENTLENS_MODEL=openai:gpt-4o-mini agentlens run examples/support_agent/suite.yaml
+python -m examples.support_agent "Where is order 1002?"               # one question
+```
+
+Its policy (refund limit, refund window) lives in the system prompt, so a prompt edit shows up as a
+case regression. See the [example README](examples/support_agent/README.md).
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/) · [LLM judges](docs/judges.md).

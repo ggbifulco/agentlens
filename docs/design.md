@@ -782,6 +782,38 @@ Implementation notes — pytest plugin (`integrations/pytest_plugin.py`, #25, FR
   rewriting; `runpy` cannot run modules through that import hook, so the `python -m agentlens`
   test removes it from `sys.meta_path` (no effect outside pytest).
 
+Implementation notes — example support agent (`examples/support_agent/`, #29, FR-D1):
+- **Agent**: `run_agent(question, model=None, *, llm=None, prompt_version="v1", max_iterations=8)`
+  is a plain loop over any `LLMClient` (`LLMRequest(messages, tools=TOOL_SPECS, temperature=0)`;
+  tool calls are executed and appended as `tool` messages; the first answer without tool calls is
+  returned; after `max_iterations` model calls it returns a fixed apology instead of raising, so
+  `max_steps` reports the runaway loop). The client is `llm=`, else `build_llm(model)`: `model=`
+  (passed by the runner) > `$AGENTLENS_MODEL` > `mock:support`; any `mock` spec builds the scripted
+  policy, other specs go through `get_client`. Wrapped with `wrap_llm`; tools with `wrap_tool`.
+- **Tools** (`lookup_order`, `issue_refund`, `track_order`, `update_address`, `escalate_to_human`,
+  `search_faq`) are closures over a per-run deep copy of a fixed in-memory database (`TODAY` is a
+  constant), so runs are isolated under concurrency and deterministic. They enforce only data
+  invariants and return `{"error": ...}` for business errors; `call_tool` turns an unknown tool,
+  bad arguments or an exception into an error result (the exception stays on the span).
+- **Policy in the prompt** (`prompts/system_<PROMPT_VERSION>.txt`): refund window and $200 limit,
+  escalation. The tools deliberately do not enforce them, so a prompt edit can regress behaviour
+  (FR-D2, #30).
+- **Mock policy** (`mock_policy.support_policy`, a `MockLLM` callable script): keyword intents per
+  clause (order number carried forward; escalation wins), each intent a generator state machine
+  replayed over the tool results already in the conversation; the first step without a result is
+  the next `ToolCall` (`id=call_<n>`), otherwise the final answer is one templated sentence per
+  intent. Rules (`up to $N`, `within N days of delivery`) are parsed from the system prompt, so the
+  mock reacts to prompt changes like a model would. Alternative rejected: per-case list scripts
+  (deterministic but they would not react to prompt or code changes, defeating regression testing).
+- **Dataset**: 27 cases in `cases.yaml`, shared by `suite.yaml` (deterministic: `no_error`,
+  `max_steps: 6`, `tool_sequence` in `ordered`/`subset` mode with `forbidden` tools for refusals,
+  case-insensitive `contains`/`regex` on facts, so real models can pass too) and
+  `suite.judges.yaml` (adds `llm_rubric`; needs a judge model, so not run in CI). Agent path
+  `examples.support_agent:run_agent`, resolved from the cwd: run from the repository root
+  (`examples/__init__.py` makes it a regular package). Tests: `tests/examples/test_support_agent.py`
+  (100% offline pass, exact tool lists per case, concurrency isolation, prompt-change regression);
+  a `live` test runs the dataset with `$AGENTLENS_LIVE_SUPPORT_MODEL` (>= 70% pass).
+
 ## 7. Comparison & gates
 - Metrics per case: pass rate, mean score per evaluator, cost, latency, steps.
 - Aggregate delta with **paired bootstrap** (10k resamples over cases) → 95% CI.
