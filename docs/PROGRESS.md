@@ -414,3 +414,24 @@ Append-only log of development sessions (newest at the bottom).
   integration left to the CLI/gates layer (noted in design §7).
 - No new dependencies. 1400 tests, 100% coverage.
 - Next: #23 Gates config and exit codes (YAML thresholds on top of `Comparison`).
+
+## 2026-11-14 — #23 Gates config and exit codes
+- Added `agentlens.compare.gates`: `load_gates(path)`, `Gates.from_dict`, `Gates`/`GateRule`
+  models, `evaluate_gates(gates, comparison=None, run=None) -> GateReport`.
+- Rules per metric: `min`/`max` (candidate value), `min_delta`/`max_delta`,
+  `min_delta_pct`/`max_delta_pct` (vs baseline, point estimate); aliases `success_rate`, `cost`,
+  `latency`; counts `regressions` (metrics with CI on the bad side) and `case_regressions`.
+  `options: {min_cases: 20, on_missing: fail}`.
+- Missing data fails the gate with a reason by default (`on_missing: skip` to skip); delta/count
+  gates without a comparison are skipped with a note, so a single run can be gated on absolute
+  values (`run_metrics(run)`, new helper in the comparator). Fewer than `min_cases` cases and
+  unpaired cases are non-failing notes.
+- `GateResult(name, metric, rule, threshold, actual, passed, skipped, reason)`,
+  `GateReport(passed, results, notes)` with `exit_code` (0 pass / 1 gate failed), `failures`,
+  `skipped`, `summary()`; JSON round-trip for reporters.
+- Loader reuses the suite's position-tracking YAML parser: every problem in one `GatesError`
+  (a `SuiteError`) at `file:line:column`, with "did you mean" hints.
+- Docs: README "Gates" (verified), design §7 implementation notes. Test helpers moved to
+  `tests/compare/helpers.py`.
+- No new dependencies. 1450 tests, 100% coverage.
+- Next: #24 CLI: run / compare / report / baseline / traces (Typer).

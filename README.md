@@ -417,6 +417,60 @@ two in-memory `run_suite` results, `paired_bootstrap(diffs)` is the statistic on
 `comparison.model_dump_json()` is what gates and reports consume. The interval needs about 20+
 cases to be meaningful (ADR 0005).
 
+### Gates
+A gates file sets the thresholds a candidate must meet (FR-S5). Per metric (`pass_rate` or its
+alias `success_rate`, `score.<evaluator>`, `cost_usd`/`cost`, `latency_ms`/`latency`, `steps`):
+`min`/`max` bound the candidate's value, `min_delta`/`max_delta` the change vs the baseline and
+`min_delta_pct`/`max_delta_pct` that change in percent. `regressions` counts metrics whose
+confidence interval is entirely on the bad side, `case_regressions` cases whose pass rate dropped.
+`evaluate_gates` returns a `GateReport` whose `exit_code` is what CI should exit with:
+
+```python
+from pathlib import Path
+
+from agentlens.compare import compare_runs, evaluate_gates, load_gates
+from agentlens.suite import Suite, run_suite
+
+Path("gates.yaml").write_text("""
+success_rate: {min: 0.9}          # alias of pass_rate: candidate value
+cost_usd: {max_delta_pct: 20, on_missing: skip}   # +20% at most; skip if no costs
+regressions: {max: 0}             # no metric whose CI is entirely on the bad side
+""")
+
+def agent(question: str) -> str:
+    return question.upper()
+
+def new_agent(question: str) -> str:
+    return question if "refund" in question else question.upper()
+
+cases = [{"id": f"q{i}", "input": f"refund {i}" if i % 3 == 0 else f"hello {i}",
+          "expected": (f"refund {i}" if i % 3 == 0 else f"hello {i}").upper()}
+         for i in range(30)]
+defaults = {"evaluators": ["no_error", "exact_match"]}
+main = run_suite(Suite(name="demo", agent=agent, cases=cases, defaults=defaults))
+pr = run_suite(Suite(name="demo", agent=new_agent, cases=cases, defaults=defaults))
+
+report = evaluate_gates(load_gates("gates.yaml"), comparison=compare_runs(main, pr))
+print(report.summary())
+print(report.exit_code)
+# gates FAILED: 0 passed, 2 failed, 1 skipped
+
+first = evaluate_gates(load_gates("gates.yaml"), run=main)   # no baseline yet: absolute rules only
+print(first.passed, first.notes)
+# gates FAILED: 0 passed, 2 failed, 1 skipped
+#   FAIL success_rate min 0.9: pass_rate 0.6667 is below min 0.9
+#   SKIP cost_usd max_delta_pct +20%: no case has a 'cost_usd' value in both experiments
+#   FAIL regressions max 0: regressions 2 is above max 0
+# 1
+# True ['no baseline comparison: 2 delta/regression checks skipped']
+```
+
+A gate whose metric has no data fails with the reason (`on_missing: skip` per gate, or
+`options: {on_missing: skip}` for all, skips it instead). Without a comparison (`run=` only, e.g. a
+first run with no baseline yet) delta and regression gates are skipped and noted. Fewer than
+`options.min_cases` (default 20) cases adds a note, never a failure. A broken file raises
+`GatesError` with every problem at its `gates.yaml:line:column`.
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/) · [LLM judges](docs/judges.md).
