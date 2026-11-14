@@ -959,6 +959,60 @@ Implementation notes — rich terminal report (`src/agentlens/report/terminal.py
   carries traces. It can be added to `CaseComparison`/`CaseSummary` when replay-based comparisons
   land in the CLI.
 
+Implementation notes — Markdown report and GitHub Action (`report/markdown.py`,
+`integrations/github.py`, `cli/github.py`, `action.yml`, #27, FR-C3, ADR 0006):
+- **Format `markdown`** (`MarkdownRenderer(marker=, max_cases=)`, registered like the others):
+  GitHub-flavoured and compact for a PR comment. Comparison: a hidden marker line, a verdict
+  headline (`### ❌ AgentLens: gates failed · 3 metrics regressed · 1 improved · 3 cases
+  regressed`; ✅/❌ always next to words, so it reads in notifications and screen readers), one
+  context line (candidate vs baseline, suite, paired/added/removed cases), the metrics table
+  (baseline, candidate, Δ, Δ%, CI, status; `↑`/`↓` for the better direction), the gates table
+  (pass/fail/skip, rule, actual, reason) with the notes as a quoted list, case regressions and
+  improvements each in a collapsed `<details>` block, added/removed case ids, and a `<sub>`
+  footer with experiment names, ids, git shas and the bootstrap method. Experiment reports have
+  the same shape (metrics, gates, failing cases collapsed). Headline verdict: the gates' when
+  there are gates, else "no metric regressed" (comparison) / "every run passed" (experiment).
+- **Escaping**: user text (names, case ids, reasons) has `&`, `<`, `>`, `|`, `\`, `*`, `[`, `]` and backticks escaped and newlines
+  flattened, so it cannot break a table or inject HTML; ids go in code spans (backticks replaced,
+  `|` escaped, which GitHub honours inside table code spans). Case tables and id lists stop at
+  `max_cases` (50) with "…and N more" (a GitHub comment holds 65 536 characters; the poster
+  truncates as a last resort).
+- **Marker**: `marker_comment(key)` = `<!-- key -->`, key restricted to `[A-Za-z0-9_.:/@+=-]` so it
+  cannot close the comment early. Default `agentlens-report`; `report --format markdown --marker
+  KEY` and the action's `marker` input set it (one per suite when a PR runs several). Matching is
+  on the exact `<!-- key -->` string, so `agentlens-report` does not match `agentlens-report:x`.
+- **Comment upsert** (`upsert_pr_comment(body, *, context, marker, client=None)`): lists the PR's
+  issue comments (`per_page=100`, following `Link: rel="next"`), PATCHes the oldest one containing
+  the marker (skips the request when the body is identical: `unchanged`), else POSTs; returns
+  `CommentResult(action, comment_id, url)`. Plain `httpx` (already a dependency) with the REST
+  headers (`Bearer` token, `application/vnd.github+json`, `X-GitHub-Api-Version: 2022-11-28`);
+  errors become `GitHubError` with GitHub's `message` and, for 401/403/404, a hint about
+  `pull-requests: write` and read-only fork tokens; the token never appears in errors or `repr`.
+  `GitHubContext.from_env()` reads `GITHUB_TOKEN` (or `GH_TOKEN`), `GITHUB_REPOSITORY`,
+  `GITHUB_EVENT_PATH` (`pull_request.number`, `issue.number` or `number`) and `GITHUB_API_URL`
+  (Enterprise). No retries: one comment per job, and a failed comment must not fail the check.
+- **CLI**: `agentlens github comment --file F [--marker --pr --repo]` (exit 2 on any failure);
+  `run --json PATH|-` writes the `ExperimentReport` with its gate verdict (status lines move to
+  stderr with `-`), so a run without a baseline can be rendered with its gates like a comparison.
+- **Action** (`action.yml`, composite): setup-uv → a venv in `$RUNNER_TEMP` with AgentLens (the
+  action's own source by default, so the action ref pins the version; `agentlens-version` for
+  PyPI) and the `install` arguments → baseline → candidate → report → comment → exit. Baseline:
+  `baseline-ref` (default the PR base sha) is fetched (`--depth=1`) and checked out in a
+  temporary `git worktree`, the suite runs there as `baseline-<sha12>`, then on the PR as
+  `pr-<n>`, and `compare --gates --json` decides the exit code; when the suite does not exist at
+  the base (a new suite) or, with `baseline-ref: ""`, there is no database, the candidate is run
+  with `--gates --json` (absolute gates only, delta gates skipped and noted). Exit 2 from any
+  step fails it immediately (misconfiguration); the gate code (0/1) is saved as an output, the
+  Markdown goes to `$GITHUB_STEP_SUMMARY` and to the PR comment (a failed comment is a warning:
+  fork PRs), and only then does the last step exit with it. `NO_COLOR` keeps the log plain.
+- **This repo's CI** (`.github/workflows/agentlens.yml`, `pull_request`, `pull-requests: write`)
+  runs `uses: ./` on `examples/ci_demo` (a `MockLLM` FAQ agent, 12 cases, gates on pass rate,
+  pass-rate delta, case regressions and steps; latency is measured and therefore not gated).
+  `tests/examples/test_ci_demo.py` checks the demo passes its gates and that the action's inputs,
+  outputs and the workflow are wired consistently (the action itself only runs on GitHub; its
+  script was exercised locally against throwaway repositories for the baseline, new-suite and
+  database modes).
+
 - **Not yet**: `agentlens ui` (M6), the pairwise judge in `compare` (§7 note), user `config`
   values on `run` (Python API only).
 
