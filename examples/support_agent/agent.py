@@ -50,7 +50,7 @@ __all__ = [
     "system_prompt",
 ]
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 """Which ``prompts/system_<version>.txt`` the agent uses by default."""
 
 PROMPT_VERSION_ENV = "SUPPORT_PROMPT_VERSION"
