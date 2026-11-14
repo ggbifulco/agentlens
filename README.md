@@ -339,6 +339,38 @@ in their own file (`cases: data/support.jsonl`), and `Suite(name=..., agent=run_
 cases=[...])` builds a suite in Python. `suite.content_hash()` fingerprints what the suite runs
 (agent, model, repetitions, resolved cases), so experiments can tell whether the suite changed.
 
+### Running a suite
+`run_suite` runs every case `repetitions` times (at most `concurrency` at once, sync or `async`
+agents), records each run as a trace, scores it and saves everything under a new experiment. An
+agent that raises or exceeds `timeout_s` fails its run, not the suite. If the agent has a `model`
+parameter it receives the model under test (`model=`, else the suite's `model:`, else
+`$AGENTLENS_MODEL`):
+
+```python
+import agentlens
+from agentlens.llm import LLMRequest, Message, get_client
+from agentlens.store import SQLiteStore
+from agentlens.suite import Suite, get_baseline, run_suite, set_baseline
+
+def echo_agent(question: str, model: str | None = None) -> str:
+    llm = agentlens.wrap_llm(get_client(model or "mock"))   # "mock" echoes the question
+    return llm.complete(LLMRequest(messages=[Message.user(question)])).content
+
+suite = Suite(name="echo", agent=echo_agent, model="mock", repetitions=3, concurrency=4,
+              defaults={"evaluators": ["no_error", "exact_match"]},
+              cases=[{"id": "hi", "input": "hi", "expected": "hi"}])
+
+with SQLiteStore("runs.db") as store:
+    result = run_suite(suite, store=store, name="main", config={"prompt_version": "v1"})
+    print(f"{result.passed}/{result.total} passed ({result.pass_rate:.0%})")   # 3/3 passed (100%)
+    print(result.experiment.config["git_sha"], result.experiment.config["suite_hash"][:12])
+    set_baseline(store, "main")            # the one baseline of suite "echo"
+    print(get_baseline(store, "echo").name)  # main
+```
+
+Each trace carries `case_id`, `repetition`, `suite` and `experiment` metadata; `arun_suite` is the
+`async` version, and `progress=lambda result, done, total: ...` reports each finished run.
+
 ## Architecture
 See [docs/architecture.md](docs/architecture.md) · [requirements](docs/requirements.md) ·
 [design](docs/design.md) · [ADRs](docs/adr/) · [LLM judges](docs/judges.md).

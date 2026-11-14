@@ -697,6 +697,48 @@ Implementation notes (`src/agentlens/suite/`, #20, FR-S1):
   and the `defaults` spelling, so it changes exactly when what runs changes (including an
   external dataset's contents) — recorded in the experiment config as the suite hash.
 
+Implementation notes — runner and experiments (`suite/runner.py`, `suite/experiment.py`, #21,
+FR-S2/FR-S3):
+- **API**: `run_suite(suite | path, *, store=None, name=None, model=None, repetitions=None,
+  concurrency=None, timeout_s=None, config=None, registry=None, redactor=DEFAULT_REDACTOR,
+  progress=None) -> ExperimentRun` is a blocking wrapper (`asyncio.run`) over `arun_suite`.
+  Overrides win over the suite's settings. Evaluators are built for every case *before* the
+  experiment is created, so a bad spec fails before anything runs or is stored.
+- **Execution**: one task per (case, repetition), all gated by one `asyncio.Semaphore(concurrency)`;
+  a slot covers the agent call and its evaluation (so LLM judges are bounded too). `async def`
+  agents are awaited; sync agents go through `asyncio.to_thread`, which copies the context, so
+  `wrap_llm`/`wrap_tool` spans land in the right trace in both cases. Each run is
+  `agentlens.run(suite.name, input=case.input, metadata={case_id, repetition, suite, experiment})`;
+  the output is converted with the recorder's JSON conversion.
+- **Agent call convention**: `agent(case.input)`, plus `model="provider:name"` when the agent has a
+  parameter named `model` and a model is known (`model=` > `suite.model` > `$AGENTLENS_MODEL`), so
+  the agent can do `get_client(model)`. No env mutation (it would leak across concurrent runs).
+  Alternative considered: always passing a run context object — more API to freeze for little gain.
+- **Failure isolation**: agent exceptions are recorded on the trace by `agentlens.run` and
+  suppressed; the run is still evaluated (e.g. `no_error` fails) and saved. `timeout_s` wraps the
+  agent call in `asyncio.wait_for` → `RunTimeoutError` recorded as `trace.error`; async agents are
+  cancelled, sync threads cannot be killed and finish in the background (their late spans are
+  dropped with a warning). Store errors are *not* suppressed: they abort the suite (remaining tasks
+  cancelled), since a silently incomplete experiment would be worse.
+- **What is evaluated and stored**: the redacted copy handed to the trace sink, so stored traces
+  and stored scores agree and re-evaluating from the store reproduces them. If the redactor fails,
+  a content-free trace (ids, timings, metadata) with `error = REDACTION_FAILED` is stored instead.
+- **Results**: `ExperimentRun(experiment, suite, cases: list[CaseResult])` with `runs`, `total`,
+  `passed`, `errors`, `pass_rate`, `case(id)`; `CaseResult(case, runs)` with `passed`, `pass_rate`,
+  `errors`, `mean_scores()` per evaluator; `RunResult(case_id, repetition, trace, eval_results)`
+  with `passed` (no error and all evaluators passed), `error`, `timed_out`. Ordered by case then
+  repetition regardless of completion order. `progress(result, completed, total)` after each saved
+  run; its exceptions are logged.
+- **Experiment config** (`experiment_config`): `git_sha` (`git rev-parse HEAD` in the suite's
+  folder), `git_dirty` (tracked changes only; both `None` without git/repo, 5 s timeout), `model`,
+  `suite_hash`, `agent`, effective `repetitions`/`concurrency`/`timeout_s`, `agentlens_version`,
+  `suite_metadata`, then user `config` (wins on clash). Default name `<suite>-YYYYmmdd-HHMMSS` (UTC).
+- **Baselines**: `set_baseline(store, id | name | Experiment)` unmarks every other baseline of the
+  same suite *first*, then marks the target (an interruption leaves zero baselines, never two);
+  `unset_baseline`, `get_baseline(store, suite name | Suite)` (most recent if several were marked
+  by hand), `find_experiment` (id, else most recent with that name) → `ExperimentNotFoundError`.
+  Built on `save_experiment` upserts, so any `Store` backend works.
+
 ## 7. Comparison & gates
 - Metrics per case: pass rate, mean score per evaluator, cost, latency, steps.
 - Aggregate delta with **paired bootstrap** (10k resamples over cases) → 95% CI.
