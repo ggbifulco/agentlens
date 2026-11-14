@@ -1,7 +1,8 @@
 # LLM-as-judge: usage, bias and calibration
 
-AgentLens ships two LLM judges (FR-E2): `llm_rubric` scores an output from 1 to 5 against your
-criteria, `llm_pass_fail` says whether it meets all of them. A pairwise A/B judge follows in #19.
+AgentLens ships three LLM judges (FR-E2): `llm_rubric` scores an output from 1 to 5 against your
+criteria, `llm_pass_fail` says whether it meets all of them, and `PairwiseJudge` says which of two
+outputs for the same case (baseline vs candidate) is better.
 This page explains how to use them and, more importantly, how far to trust them.
 
 ## Using a judge
@@ -59,6 +60,60 @@ Temperature 0 is not a determinism guarantee — providers can still vary slight
 and silently update models. The cache is what makes a run reproducible; temperature 0 makes the
 first verdict as stable as the provider allows.
 
+## Pairwise A/B comparison
+
+A pairwise judge looks at two outputs side by side instead of scoring one. Relative judgements are
+usually more reliable than absolute 1-5 scores ("is B better than A?" is easier than "is B a 4?"),
+which makes it the natural judge for "did my change make answers better or worse?".
+
+```python
+from agentlens.evals import PairwiseJudge
+
+judge = PairwiseJudge("Answers the question and confirms the refund amount",
+                      model="openai:gpt-4o-mini")      # same model/client/cache/retries as above
+result = judge.compare(baseline_trace, candidate_trace, case)   # or: await judge.acompare(...)
+result.winner        # "a" (baseline), "b" (candidate) or "tie"
+result.preference    # mean preference for A: 1.0 = A better, 0.5 = tie, 0.0 = B better
+result.consistent    # did both presentation orders agree?
+result.confidence    # 1 - |pref(A first) - pref(B first)|: 1, 0.5 or 0
+result.reasons       # the judge's explanation per order
+result.to_eval_result(candidate="b")   # EvalResult "pairwise": passed if B is not worse than A
+```
+
+It is not a per-trace evaluator (it needs two traces), so it is not in the evaluator registry and
+cannot be listed in a suite's `evaluators:`; the comparison step (#22, `agentlens compare`) will run
+it on the baseline/candidate trace pairs of each case and report `to_eval_result(candidate="b")`.
+Extra parameters: `include_expected` (default `true`) and a custom `template` with
+`$criteria $input $output_1 $output_2 $reference` that asks for `{"reasoning", "winner"}`.
+
+### Position bias mitigation
+
+Every comparison makes **two** judge calls (temperature 0, JSON mode):
+
+| Order | Output 1 | Output 2 | Judge says `"1"` | Judge says `"2"` | `"tie"` |
+|---|---|---|---|---|---|
+| `ab` | A | B | A better (1.0) | B better (0.0) | 0.5 |
+| `ba` | B | A | B better (0.0) | A better (1.0) | 0.5 |
+
+The swapped answer is mapped back to A/B and the two preferences are averaged:
+
+- both orders agree → a clear winner (or a tie), `consistent=True`, confidence 1;
+- one order picks a winner, the other says tie → that winner with preference 0.75/0.25,
+  `consistent=False`, confidence 0.5;
+- the orders pick opposite winners (the judge just preferred a *position*) → preference 0.5, a
+  **tie**, `consistent=False`, confidence 0 — position bias cannot manufacture a winner.
+
+Both orders, their raw positional answers, mapped winners, reasoning and call metadata are kept in
+`details["orders"]` of the `EvalResult`. A high share of inconsistent pairs across a suite means
+the criteria are too vague for the judge to decide (or the outputs are genuinely close): sharpen
+the criteria before trusting pairwise win rates.
+
+Caching works as for the other judges, with the presentation order part of the key: the cached
+"output" is the ordered pair `[output 1, output 2]`, so the two orders of a comparison are cached
+separately, and re-running (even with A and B swapped) reuses both verdicts. If either order's reply
+cannot be parsed after the retries, the result has `error` set, is a tie with confidence 0, and its
+`EvalResult` fails with `details["error"]` — a comparison is never decided on one order alone.
+
 ## Known judge biases
 
 LLM judges are useful because they scale, not because they are right. Published studies of
@@ -66,7 +121,8 @@ LLM-as-judge (e.g. Zheng et al., *Judging LLM-as-a-Judge with MT-Bench and Chatb
 NeurIPS 2023) report systematic biases you should expect in your own suites:
 
 - **Position bias** — in pairwise comparisons the judge prefers the answer shown first (or
-  second), independent of quality. The pairwise judge (#19) evaluates both orders for this reason;
+  second), independent of quality. `PairwiseJudge` evaluates both orders for this reason (see
+  [Position bias mitigation](#position-bias-mitigation));
   with single-output judges, keep the output in a fixed place in the prompt (AgentLens does).
 - **Verbosity bias** — longer, more detailed-looking answers get higher scores even when the extra
   text is irrelevant or wrong. Say in the criteria what matters ("answers in at most three
