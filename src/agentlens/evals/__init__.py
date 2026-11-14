@@ -19,13 +19,20 @@ spellings of :class:`~agentlens.schema.EvaluatorSpec`::
 
 Built-in evaluators (:mod:`agentlens.evals.builtin`: ``exact_match``,
 ``contains``, ``regex``, ``json_schema``, ``no_error``, ``tool_sequence``,
-``max_steps``, ``cost_budget``, ``latency_budget``) register themselves in
+``max_steps``, ``cost_budget``, ``latency_budget``, and the LLM judges
+``llm_rubric`` / ``llm_pass_fail``) register themselves in
 :data:`default_registry` when this package is imported::
 
     results = evaluate_case(trace, case, ["no_error", {"contains": "refund"},
                                           {"regex": {"pattern": r"order \d+"}},
                                           {"tool_sequence": {"mode": "ordered"}},
                                           {"max_steps": 8}])
+
+LLM judges (:mod:`agentlens.evals.judge`) call their judge model at temperature 0,
+parse its JSON verdict robustly and cache it by ``sha256(judge model, prompt, output)``::
+
+    judge = get_evaluator({"llm_rubric": "Polite, confirms the refund amount"},
+                          model="openai:gpt-4o-mini")
 
 An evaluator that raises never crashes a run: :func:`run_evaluator` and
 ``@evaluator`` turn the exception into a failed :class:`~agentlens.schema.EvalResult`.
@@ -46,6 +53,8 @@ from agentlens.evals.builtin import (
     ExactMatch,
     JsonSchema,
     LatencyBudget,
+    LLMPassFail,
+    LLMRubric,
     MaxSteps,
     NoError,
     OutputPath,
@@ -63,6 +72,14 @@ from agentlens.evals.errors import (
     EvaluatorConfigError,
     EvaluatorError,
     UnknownEvaluatorError,
+)
+from agentlens.evals.judge import (
+    DiskJudgeCache,
+    JudgeCache,
+    JudgeParseError,
+    LLMJudge,
+    MemoryJudgeCache,
+    judge_cache_key,
 )
 from agentlens.evals.registry import (
     EvaluatorFactory,
@@ -89,6 +106,7 @@ __all__ = [
     "AsyncEvaluator",
     "Contains",
     "CostBudget",
+    "DiskJudgeCache",
     "DuplicateEvaluatorError",
     "Evaluator",
     "EvaluatorConfigError",
@@ -98,8 +116,14 @@ __all__ = [
     "ExactMatch",
     "FunctionEvaluator",
     "JsonSchema",
+    "JudgeCache",
+    "JudgeParseError",
+    "LLMJudge",
+    "LLMPassFail",
+    "LLMRubric",
     "LatencyBudget",
     "MaxSteps",
+    "MemoryJudgeCache",
     "NoError",
     "OutputPath",
     "OutputPathError",
@@ -116,6 +140,7 @@ __all__ = [
     "evaluate_case",
     "evaluator",
     "get_evaluator",
+    "judge_cache_key",
     "output_text",
     "output_value",
     "register",

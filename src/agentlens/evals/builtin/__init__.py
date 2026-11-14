@@ -13,7 +13,12 @@ each class as its factory; the *primary* parameter (what a scalar shorthand
 * ``tool_sequence`` (:class:`ToolSequence`) — ``tools``, the expected tool names;
 * ``max_steps`` (:class:`MaxSteps`) — ``value``, the step limit;
 * ``cost_budget`` (:class:`CostBudget`) — ``max_usd``;
-* ``latency_budget`` (:class:`LatencyBudget`) — ``max_ms``.
+* ``latency_budget`` (:class:`LatencyBudget`) — ``max_ms``;
+* ``llm_rubric`` (:class:`LLMRubric`) — ``criteria`` (LLM judge, score 1-5);
+* ``llm_pass_fail`` (:class:`LLMPassFail`) — ``criteria`` (LLM judge, pass/fail).
+
+The judges resolve their LLM client lazily (``model`` param, else
+``$AGENTLENS_JUDGE_MODEL``/``$AGENTLENS_MODEL``), so registering them needs no setup.
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ from agentlens.evals.builtin._common import (
     output_value,
     to_text,
 )
+from agentlens.evals.builtin.judges import LLMPassFail, LLMRubric
 from agentlens.evals.builtin.output import UNSET, Contains, ExactMatch, JsonSchema, Regex
 from agentlens.evals.builtin.trace_checks import (
     CostBudget,
@@ -42,6 +48,8 @@ __all__ = [
     "CostBudget",
     "ExactMatch",
     "JsonSchema",
+    "LLMPassFail",
+    "LLMRubric",
     "LatencyBudget",
     "MaxSteps",
     "NoError",
@@ -65,6 +73,8 @@ BUILTIN_EVALUATORS: dict[str, tuple[EvaluatorFactory, str]] = {
     "max_steps": (MaxSteps, "value"),
     "cost_budget": (CostBudget, "max_usd"),
     "latency_budget": (LatencyBudget, "max_ms"),
+    "llm_rubric": (LLMRubric, "criteria"),
+    "llm_pass_fail": (LLMPassFail, "criteria"),
 }
 """Name -> (factory, primary parameter) of every built-in evaluator."""
 
