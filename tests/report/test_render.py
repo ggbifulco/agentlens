@@ -132,17 +132,17 @@ def test_json_format_round_trips() -> None:
     assert ComparisonReport.model_validate_json(render(cmp, ReportFormat.JSON)) == cmp
 
 
-def test_planned_formats_are_not_available_yet() -> None:
-    assert available_formats() == [
-        ReportFormat.TEXT,
-        ReportFormat.RICH,
-        ReportFormat.JSON,
-        ReportFormat.MARKDOWN,
-    ]
-    with pytest.raises(ReportFormatUnavailableError, match=r"HTML report \(#28\)"):
-        get_renderer("html")
+def test_every_format_is_available() -> None:
+    assert available_formats() == list(ReportFormat)
     with pytest.raises(ValueError, match="pdf"):
         get_renderer("pdf")
+
+
+def test_planned_formats_name_their_issue(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(render_module, "_RENDERERS", {})
+    monkeypatch.setattr(render_module, "_PLANNED", {ReportFormat.HTML: "the HTML report (#28)"})
+    with pytest.raises(ReportFormatUnavailableError, match=r"arrives with the HTML report \(#28\)"):
+        get_renderer("html")
 
 
 def test_register_renderer_plugs_in_a_format(monkeypatch: pytest.MonkeyPatch) -> None:

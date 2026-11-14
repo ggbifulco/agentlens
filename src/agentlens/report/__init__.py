@@ -16,10 +16,12 @@ Formats available today are plain ``text``, ``rich`` (coloured tables for a
 terminal: ``render(report, "rich")``, or print :func:`comparison_renderable` /
 :func:`experiment_renderable` to a ``rich`` console), ``json`` and
 ``markdown`` (GitHub-flavoured, for PR comments: :class:`MarkdownRenderer`,
-starting with the hidden :func:`marker_comment`). ``html`` (#28) registers its
-renderer with :func:`register_renderer`.
+starting with the hidden :func:`marker_comment`) and ``html`` (one
+self-contained page with a span-tree trace viewer: :func:`render_html` with
+the runs, so the traces are embedded).
 """
 
+from agentlens.report.html import HtmlRenderer, render_html
 from agentlens.report.markdown import (
     DEFAULT_MARKER,
     MarkdownRenderer,
@@ -53,6 +55,7 @@ __all__ = [
     "CaseSummary",
     "ComparisonReport",
     "ExperimentReport",
+    "HtmlRenderer",
     "JSONRenderer",
     "MarkdownRenderer",
     "PlainTextRenderer",
@@ -70,5 +73,6 @@ __all__ = [
     "marker_comment",
     "register_renderer",
     "render",
+    "render_html",
     "table",
 ]

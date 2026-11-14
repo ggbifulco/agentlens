@@ -10,6 +10,7 @@ import pytest
 from agentlens import __version__
 from agentlens.cli import EXIT_GATE_FAILED, EXIT_OK, EXIT_USAGE, main
 from agentlens.cli._common import auto_format
+from agentlens.compare import compare_runs
 from agentlens.report import ComparisonReport, ExperimentReport, ReportFormat, load_report
 from agentlens.store import SQLiteStore
 from agentlens.suite import get_baseline
@@ -375,11 +376,76 @@ def test_report_saved_comparison(ran: Toy) -> None:
     assert "candidate  pr-1 (" in result.stdout
 
 
-def test_report_planned_formats(ran: Toy) -> None:
-    result = ran("report", "pr-1", "--format", "html")
+def _embedded(html: str) -> dict[str, dict[str, dict[str, object]]]:
+    start = html.index('<script type="application/json" id="agentlens-data">')
+    body = html[html.index(">", start) + 1 : html.index("</script>", start)]
+    data: dict[str, dict[str, dict[str, object]]] = json.loads(body)
+    return data
+
+
+def test_report_html_embeds_the_traces(ran: Toy) -> None:
+    out = ran.root / "out" / "report.html"
+    result = ran("report", "pr-1", "--format", "html", "-o", str(out))
+    assert result.exit_code == EXIT_OK, result.output
+    html = out.read_text(encoding="utf-8")
+    assert html.startswith("<!doctype html>")
+    traces = _embedded(html)["traces"]
+    assert len(traces) == 12  # 6 cases x 2 repetitions
+    assert {t["side"] for t in traces.values()} == {None}
+    assert "boom" in html
+    assert "Traces are not included" not in html
+
+
+def test_report_html_to_stdout(ran: Toy) -> None:
+    result = ran("report", "main", "--format", "html")
+    assert result.exit_code == EXIT_OK
+    assert result.stdout.startswith("<!doctype html>")
+
+
+def test_compare_writes_html(ran: Toy) -> None:
+    out = ran.root / "cmp.html"
+    result = ran("compare", "-c", "pr-1", "--resamples", "20", "--html", str(out))
+    assert result.exit_code == EXIT_OK, result.output
+    assert f"wrote {out}" in result.stderr
+    traces = _embedded(out.read_text(encoding="utf-8"))["traces"]
+    sides = sorted(str(t["side"]) for t in traces.values())
+    assert sides == ["baseline"] * 12 + ["candidate"] * 12
+
+
+def test_compare_unwritable_html(ran: Toy) -> None:
+    (ran.root / "dir.html").mkdir()
+    result = ran("compare", "-c", "pr-1", "--resamples", "20", "--html", "dir.html")
     assert result.exit_code == EXIT_USAGE
-    assert "not available yet" in result.stderr
-    assert "#2" in result.stderr
+
+
+def test_report_html_from_a_saved_comparison(ran: Toy) -> None:
+    cmp = ran.root / "cmp.json"
+    assert ran("compare", "-c", "pr-1", "--resamples", "20", "--json", str(cmp)).exit_code == 0
+    with_db = ran("report", str(cmp), "--format", "html")
+    assert with_db.exit_code == EXIT_OK
+    assert "note:" not in with_db.stderr
+    assert len(_embedded(with_db.stdout)["traces"]) == 24
+    without_db = ran("report", str(cmp), "--format", "html", db=False)  # default db: absent
+    assert without_db.exit_code == EXIT_OK
+    assert "no traces for the baseline and candidate" in without_db.stderr
+    assert _embedded(without_db.stdout)["traces"] == {}
+    assert "Traces are not included" in without_db.stdout
+
+
+def test_report_html_from_a_file_with_unknown_experiments(ran: Toy) -> None:
+    exp = ran.root / "exp.json"
+    assert ran("report", "pr-1", "--format", "json", "-o", str(exp)).exit_code == 0
+    other_db = ran.root / "other.db"
+    SQLiteStore(other_db).close()
+    result = ran("--db", str(other_db), "report", str(exp), "--format", "html", db=False)
+    assert result.exit_code == EXIT_OK
+    assert "no traces for the candidate" in result.stderr
+    in_memory = ran.root / "bare.json"
+    bare = compare_runs([], [], resamples=10)  # no experiments: in memory
+    in_memory.write_text(bare.model_dump_json(), encoding="utf-8")
+    result = ran("report", str(in_memory), "--format", "html")
+    assert result.exit_code == EXIT_OK
+    assert "no traces for the baseline and candidate" in result.stderr
 
 
 @pytest.mark.parametrize(

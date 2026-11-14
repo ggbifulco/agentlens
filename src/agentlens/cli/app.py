@@ -17,6 +17,7 @@ from agentlens.cli._common import (
     EXIT_GATE_FAILED,
     State,
     auto_format,
+    db_exists,
     fail,
     open_store,
     user_errors,
@@ -42,6 +43,7 @@ from agentlens.compare import (
 from agentlens.report import (
     ComparisonReport,
     ExperimentReport,
+    HtmlRenderer,
     MarkdownRenderer,
     Renderer,
     ReportFormat,
@@ -291,6 +293,14 @@ def compare(
             "to stdout instead of text.",
         ),
     ] = None,
+    html_out: Annotated[
+        Path | None,
+        typer.Option(
+            "--html",
+            metavar="PATH",
+            help="Also write a self-contained HTML report with both experiments' traces.",
+        ),
+    ] = None,
 ) -> None:
     """Compare a candidate experiment against a baseline.
 
@@ -306,8 +316,9 @@ def compare(
         cand = find_experiment(store, candidate)
         base = _resolve_baseline(store, baseline, cand)
         cand_runs = experiment_runs(store, cand)
+        base_runs = experiment_runs(store, base)
         comparison = compare_runs(
-            experiment_runs(store, base),
+            base_runs,
             cand_runs,
             resamples=resamples,
             seed=seed,
@@ -328,6 +339,12 @@ def compare(
         if json_out is not None:
             with user_errors():
                 _write(Path(json_out), render(report, ReportFormat.JSON))
+    if html_out is not None:
+        with user_errors():
+            _write(
+                html_out, HtmlRenderer(runs=cand_runs, baseline_runs=base_runs).comparison(report)
+            )
+        typer.echo(f"wrote {html_out}", err=True)
     _exit_on_gates(gate_report)
 
 
@@ -353,7 +370,7 @@ def report(
             case_sensitive=False,
             help="Output format [default: rich on a terminal, text when piped, written to "
             "a file or with $NO_COLOR]. markdown is GitHub-flavoured, for PR comments; html "
-            "arrives with the reporter of #28.",
+            "is a self-contained page with the traces (from the database).",
             show_default=False,
         ),
     ] = None,
@@ -391,12 +408,17 @@ def report(
         loaded: ExperimentReport | ComparisonReport
         if path.is_file():
             loaded = load_report(path)
+            if fmt is ReportFormat.HTML:
+                renderer = _html_renderer_for(ctx, loaded)
         elif path.suffix.lower() == ".json":
             fail(f"no such file: {target}")
         else:
             with open_store(ctx) as store:
                 experiment = find_experiment(store, target)
-                loaded = ExperimentReport.from_runs(experiment, experiment_runs(store, experiment))
+                runs = experiment_runs(store, experiment)
+            loaded = ExperimentReport.from_runs(experiment, runs)
+            if fmt is ReportFormat.HTML:
+                renderer = HtmlRenderer(runs=runs)
         if isinstance(loaded, ComparisonReport):
             text = renderer.comparison(loaded)
         else:
@@ -406,6 +428,41 @@ def report(
         else:
             _write(output, text)
             typer.echo(f"wrote {output}", err=True)
+
+
+def _html_renderer_for(
+    ctx: typer.Context, report: ExperimentReport | ComparisonReport
+) -> HtmlRenderer:
+    """An HTML renderer with the traces of the report's experiments, if they are in the database.
+
+    A report file may come from another machine (a CI artifact), so a missing
+    database or experiment is not an error: the page shows the aggregates only.
+    """
+    if isinstance(report, ComparisonReport):
+        roles = {"baseline": report.comparison.baseline, "candidate": report.comparison.candidate}
+    else:
+        roles = {"candidate": report.experiment}
+    found: dict[str, list[RunResult]] = {}
+    missing = [role for role, exp in roles.items() if exp is None]
+    if db_exists(ctx):
+        with open_store(ctx) as store:
+            for role, exp in roles.items():
+                if exp is None:
+                    continue
+                if store.get_experiment(exp.id) is None:
+                    missing.append(role)
+                else:
+                    found[role] = experiment_runs(store, exp.id)
+    else:
+        missing = list(roles)
+    if missing:
+        typer.echo(
+            "note: no traces for the "
+            + " and ".join(sorted(missing))
+            + " in the database; the HTML report shows the aggregates only",
+            err=True,
+        )
+    return HtmlRenderer(runs=found.get("candidate"), baseline_runs=found.get("baseline"))
 
 
 # Registered after run/compare/report so `agentlens --help` lists those first.

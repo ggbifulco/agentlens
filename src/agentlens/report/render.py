@@ -1,10 +1,10 @@
 """Report formats and the renderer registry.
 
 A renderer turns a report model into text. ``text``, ``rich`` (the coloured
-terminal report), ``json`` and ``markdown`` (for PR comments) are built in;
-``html`` is reserved for the reporter of #28, which plugs in with
-:func:`register_renderer`, so the CLI's ``agentlens report --format`` needs no
-change.
+terminal report), ``json``, ``markdown`` (for PR comments) and ``html`` (a
+self-contained page; the registered instance has no traces, see
+:class:`~agentlens.report.HtmlRenderer`) are built in; other renderers plug in
+with :func:`register_renderer`.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Protocol
 
+from agentlens.report.html import HtmlRenderer
 from agentlens.report.markdown import MarkdownRenderer
 from agentlens.report.model import ComparisonReport, ExperimentReport
 from agentlens.report.plain import JSONRenderer, PlainTextRenderer
@@ -38,6 +39,7 @@ class ReportFormat(StrEnum):
     MARKDOWN = "markdown"
     """GitHub-flavoured Markdown for PR comments (:class:`~agentlens.report.MarkdownRenderer`)."""
     HTML = "html"
+    """Self-contained page with a trace viewer (:class:`~agentlens.report.HtmlRenderer`)."""
 
 
 class Renderer(Protocol):
@@ -56,15 +58,15 @@ class ReportFormatUnavailableError(LookupError):
     """No renderer is registered for the requested format (yet)."""
 
 
-_PLANNED = {
-    ReportFormat.HTML: "the HTML report (#28)",
-}
+_PLANNED: dict[ReportFormat, str] = {}
+"""Formats announced but not implemented yet, with the issue that brings them."""
 
 _RENDERERS: dict[ReportFormat, Renderer] = {
     ReportFormat.TEXT: PlainTextRenderer(),
     ReportFormat.RICH: RichRenderer(),
     ReportFormat.JSON: JSONRenderer(),
     ReportFormat.MARKDOWN: MarkdownRenderer(),
+    ReportFormat.HTML: HtmlRenderer(),
 }
 
 
